@@ -54,7 +54,7 @@ elseif strcmp(anm_to_reproduce, "est")
 else
     error("Not a valid anm type for reproduction");
 end
-headRotation = true;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
+headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
 %% generate RIR and convolve with speech
 [s, fs] = audioread(sig_path);
@@ -78,6 +78,7 @@ NFFT = 2^nextpow2(size(anm_t, 1));
 anm_f = fft(anm_t, NFFT, 1); 
 % remove negative frequencies
 anm_f = anm_f(1:NFFT/2+1, :);
+
 % vector of frequencies
 fVec = (0:NFFT-1)'/NFFT * fs;
 fVec_pos = fVec(1 : NFFT/2 + 1);
@@ -96,59 +97,34 @@ if DisplayProgress
     fprintf('\n');
     disp('Plane-wave density dimensions:');
     disp('=============================');
-    disp(['anm_f is of size (freq, (N_PW + 1)^2) = (' num2str(size(anm_f, 1),'%d') ', ' num2str(size(anm_f, 2),'%d') ')']);
+    disp(['anm_t is of size (samples, (N_PW + 1)^2) = (' num2str(size(anm_t, 1),'%d') ', ' num2str(size(anm_t, 2),'%d') ')']);
 end
 
 %% ================= Calculate array measurements  
 p_array_t = anm2p(anm_t(:, 1:(N_array + 1)^2), fs, r_array, [th_array, ph_array], sphereType);
+% trim zeros at the end of anm_est_t
+p_array_t = p_array_t(1:size(anm_t, 1), :);
 % soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
-p_array_f = fft(p_array_t, NFFT, 1);
-% remove negative frequencies
-p_array_f = p_array_f(1:NFFT/2+1, :);
 
 if DisplayProgress
     fprintf('\n');
     disp('Array recordings dimensions:');
     disp('===========================');
-    disp(['p_array_f is of size (freq, mics) = (' num2str(size(p_array_f, 1),'%d') ', ' num2str(size(p_array_f, 2),'%d') ')']);
+    disp(['p_array_t is of size (samples, mics) = (' num2str(size(p_array_t, 1),'%d') ', ' num2str(size(p_array_t, 2),'%d') ')']);
 end
 
-%% ================= Plane wave decomposition 
-% Performing Tikhonov regularization for robust PWD as in [2] eq.(2.18)
-Ymic = shmat(N_array, [th_array, ph_array]);
-reg_meth = 1;
-N_Bm = N_array;                                                 % SH order of plane-wave decomposition by Bn "inversion"
-kr = 2 * pi * fVec_pos * r_array / c;
-Bm2 = bn(N_Bm, kr, "sphereType", sphereType);
 
-switch reg_meth
-    case 1
-        % same regularization for all frequencies
-        lambda_tikhonov = db2mag(-50);                                   % regularization term
-        Bm_reg = conj(Bm2) ./ (abs(Bm2).^2 + lambda_tikhonov^2);         % eq.(2.18) in [2]
-    case 2
-        % frequency dependent regularization              
-        lambda_tikhonov = db2mag(-50);                                   % regularization term                
-        Bm_reg_den = abs(Bm2).^2;
-        Bm_reg_den(Bm_reg_den < lambda_tikhonov^2) = lambda_tikhonov^2;        
-        Bm_reg = conj(Bm2) ./ Bm_reg_den;                                
-end
-%figure; semilogx(fVec_pos, 10*log10(abs(Bm_reg))); xlabel('Frequency [Hz]'); ylabel('Magntitude [dB]');
+%% ================= Plane wave decomposition
+snr_db = 40;
+anm_est_t = p2anm(p_array_t, fs, [th_array, ph_array], r_array, sphereType, snr_db, N_array);
+% trim zeros at the end of anm_est_t
+anm_est_t = anm_est_t(1:size(p_array_t, 1), :);
+% soundsc(real(anm_est_t(:,1)), fs);
 
-% SFT of array recordings 
-pnm_f = (pinv(Ymic) * p_array_f.').';
-% Perform plane-wave decomposition in the frequency domain
-anm_est_f = Bm_reg .* pnm_f;
-
-% Transform anm_est_f to time domain
-% pad negative frequencies with zeros (has no effect since we use ifft with "symmetric" flag)
-anm_est_f(end+1:NFFT, :) = 0;
-anm_est_t = ifft(anm_est_f, [], 1, 'symmetric');
-% trim to size before power of 2 padding
-anm_est_t(size(anm_t,1)+1:end,:) = [];
-% soundsc([real(anm_t(:, 1))], fs); 
-% soundsc([real(anm_est_t(:, 1))], fs); 
-
+% transform to frequency domain
+anm_est_f = fft(anm_est_t, NFFT, 1);
+% remove negative frequencies
+anm_est_f = anm_est_f(1:NFFT/2+1, :);
 
 %% ================= Generate binaural signals - Ambisonics format
 if DisplayProgress
@@ -163,6 +139,7 @@ if strcmp(anm_to_reproduce, "sim")
     anm_BR = [anm_BR, conj(anm_BR(:, end-1:-1:2))];  % just to be consistent size-wise
 elseif strcmp(anm_to_reproduce, "est")
     anm_BR = anm_est_f.';       
+    anm_BR = [anm_BR, conj(anm_BR(:, end-1:-1:2))];  % just to be consistent size-wise
 end
 
 % load HRTF to an hobj struct -
