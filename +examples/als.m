@@ -25,7 +25,7 @@ flim = [2000, 4000]; % frequency band for ALS to operate on
 x = als.wrapper(p, fs, flim, doa_noisy, delay_noisy, "array_type", "em32", "plot_flag", 1, "x_exp", x_exp, "s_exp", s);
 
 %% reconstruct the RIR using the estimated amplitudes and the noisy DOAs and delays
-rir_reconstructed = rir_from_parametric(fs, delay_noisy, x, doa_noisy, "array_type", "em32");
+rir_reconstructed = image_method.rir_from_parametric(fs, delay_noisy, x, doa_noisy, "array_type", "em32");
 figure; plot((0:size(rir, 1) - 1) / fs, rir(:, 1)); % plot the RIR of mic #1
 xlabel('Time [sec]');
 
