@@ -14,7 +14,7 @@
 % clearvars;
 % close all;
 % clc;
-function [s_hat, fs] = pwd_dpd_music_beamforming(s, fs,roomDim)
+function [s_hat, fs] = pwd_dpd_music_beamforming(s, fs,roomDim,sourcePos)
 startup_script();
 
 %% ================= parameters/flags - general
@@ -35,7 +35,7 @@ N_PW = 15;                                      % SH order of plane-wave synthes
 
 %% ================= parameters/flags - room
 % roomDim =       [15.5 9.8 7.5];     % Room Dimensions (L,W,H) [m]
-sourcePos  =    [8.25 3.8 1.7];     % Source position (x,y,z) [m]
+% sourcePos  =    [8.25 3.8 1.7];     % Source position (x,y,z) [m]
 arrayPos   =    [5 5 1.7];          % Receiver position (x,y,z) [m]
 R = 0.9;                            % walls refelection coeff
 
