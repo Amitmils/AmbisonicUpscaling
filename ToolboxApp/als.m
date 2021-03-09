@@ -1,19 +1,14 @@
-% Author: Tom Shlomo, ACLab BGU, 2020
-function [x,fs] = als(s,fs,roomDim)
-arguments
-    s
-    fs
-    roomDim (1,3) double
-    % Dimensions of the room, meters. [Lx, Ly, Lz].
-end
+    % Author: Tom Shlomo, ACLab BGU, 2020
+function [x,fs] = als(s,fs,roomDim,sourcePos,arrayPos,K)
+
 startup_script();
 rng('default');
 %[s, fs] = audioread("+examples/data/female_speech.wav");
 
 %% generate RIR and convolve with speech
 %roomDim = [7,5,3];
-sourcePos = [roomDim(1) * 2/3, roomDim(2)/2, 1.5] + rand_between([-0.5, 0.5], [1, 3]);
-arrayPos =  [roomDim(1) * 1/4, roomDim(2)/2, 1.5] + rand_between([-0.5, 0.5], [1, 3]);
+% sourcePos = [roomDim(1) * 2/3, roomDim(2)/2, 1.5] + rand_between([-0.5, 0.5], [1, 3]);
+% arrayPos =  [roomDim(1) * 1/4, roomDim(2)/2, 1.5] + rand_between([-0.5, 0.5], [1, 3]);
 
 R = 0.95; % walls refelection coeff
 
@@ -22,7 +17,7 @@ R = 0.95; % walls refelection coeff
 p = fftfilt(rir, s);
 
 %% apply ALS
-K = 20; % number of early reflections to consider
+% K = 20; % number of early reflections to consider
 doa_noisy = randn_on_sphere(K, parametric_rir.omega(1:K, :), 5*pi/180); % noisy DOA with 5 deg std
 delay_noisy = parametric_rir.delay(1:K) + [0; randn(K-1,1)] * 10e-6; % noisy delay with 10usec std
 x_exp = parametric_rir.amp(1:K, :); % ground truth amplitudes
