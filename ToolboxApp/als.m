@@ -1,5 +1,5 @@
     % Author: Tom Shlomo, ACLab BGU, 2020
-function [x,fs] = als(s,fs,roomDim,sourcePos,arrayPos,K)
+function [x,fs] = als(s,fs,roomDim,sourcePos,arrayPos,R,K)
 
 startup_script();
 rng('default');
@@ -10,7 +10,7 @@ rng('default');
 % sourcePos = [roomDim(1) * 2/3, roomDim(2)/2, 1.5] + rand_between([-0.5, 0.5], [1, 3]);
 % arrayPos =  [roomDim(1) * 1/4, roomDim(2)/2, 1.5] + rand_between([-0.5, 0.5], [1, 3]);
 
-R = 0.95; % walls refelection coeff
+% R = 0.95; % walls refelection coeff
 
 [rir, parametric_rir] = image_method.calc_rir(fs, roomDim, sourcePos, arrayPos, R,...
     {"zero_first_delay", true}, {"array_type", "em32"}); %#ok<CLARRSTR>
