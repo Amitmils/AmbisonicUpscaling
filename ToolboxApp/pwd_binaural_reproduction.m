@@ -13,9 +13,10 @@
 % Created by:   Lior Madmoni
 % Modified:     February 4, 2021
 
-clearvars;
-close all;
-clc;
+% clearvars;
+% close all;
+% clc;
+function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array)
 
 startup_script();
 
@@ -31,8 +32,8 @@ c = soundspeed();               % speed of sound [m/s]
 DisplayProgress = true;         % true: display progress on command window
 
 %% ================= parameters/flags - spherical array
-N_array = 4;                    % SH order of array
-r_array = 0.042;                % array radius. 0.042 is similar to EM32 array
+% N_array = 4;                    % SH order of array
+% r_array = 0.042;                % array radius. 0.042 is similar to EM32 array
 sphereType = "open";            % "open" / "rigid"
 
 %================= generate spherical coordinates of spherical array   
@@ -43,10 +44,10 @@ N_PW = 15;                                      % SH order of plane-wave synthes
 sig_path = "+examples/data/female_speech.wav";  % location of .wav file - signal
 
 %% ================= parameters/flags - room
-roomDim =       [15.5 9.8 7.5];     % Room Dimensions (L,W,H) [m]
-sourcePos  =    [8.25 7.8 1.7];     % Source position (x,y,z) [m]
-arrayPos   =    [5 5 1.7];          % Receiver position (x,y,z) [m]
-R = 0.9;                            % walls refelection coeff
+% roomDim =       [15.5 9.8 7.5];     % Room Dimensions (L,W,H) [m]
+% sourcePos  =    [8.25 7.8 1.7];     % Source position (x,y,z) [m]
+% arrayPos   =    [5 5 1.7];          % Receiver position (x,y,z) [m]
+% R = 0.9;                            % walls refelection coeff
 
 %% ================= parameters/flags - binaural reproduction
 anm_to_reproduce = "est";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
@@ -57,10 +58,10 @@ elseif strcmp(anm_to_reproduce, "est")
 else
     error("Not a valid anm type for reproduction");
 end
-headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
+headRotation = true;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
 %% generate RIR and convolve with speech
-[s, fs] = audioread(sig_path);
+% [s, fs] = audioread(sig_path);
 
 [hnm, parametric_rir] = image_method.calc_rir(fs, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
 T60 = RoomParams.T60(hnm(:,1), fs); 
@@ -200,7 +201,7 @@ end
 
 % Listen to results - use headphones
 soundsc(bin_sig_t, fs);
-
+end
 
 
 
