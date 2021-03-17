@@ -6,21 +6,31 @@ classdef BaseProcess
         args = containers.Map;
     end
     methods(Abstract)
-        [s,fs]= process(obj);
+        [s,fs]= process(obj,s, fs,roomDim,sourcePos,arrayPos,R);
     end
     methods
         
         
-        function bind(obj,component,argName)
-     
+        function res=bind(obj,component,argnm,r)
+            
+            function callback(src,e,r)
+                if r
+                    src.Value = round(src.Value);
+                end
+                obj.args(argnm) = src.Value;
+            end
+            if exist('r','var')
+                component.ValueChangedFcn ={@callback,true};
+            else
+                component.ValueChangedFcn ={@callback,false};
+            end
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
-            component.Value = obj.args(argName);
-            function callback(~,src,~)
-                obj.args(argName) = src.Value;
-            end
-            component.ValueChangedFcn ={@callback};
+            component.Value = obj.args(argnm);
+            res=true;
         end
+        
     end
 end
+
 

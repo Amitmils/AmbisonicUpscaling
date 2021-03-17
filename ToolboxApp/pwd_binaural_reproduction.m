@@ -61,7 +61,7 @@ elseif strcmp(anm_to_reproduce, "est")
 else
     error("Not a valid anm type for reproduction");
 end
-headRotation = true;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
+headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
 %% generate RIR and convolve with speech
 % [s, fs] = audioread(sig_path);
@@ -203,7 +203,7 @@ if DisplayProgress
 end
 
 % Listen to results - use headphones
-soundsc(bin_sig_t, fs);
+% soundsc(bin_sig_t, fs);
 end
 
 
