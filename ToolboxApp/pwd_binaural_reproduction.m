@@ -16,7 +16,7 @@
 % clearvars;
 % close all;
 % clc;
-function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array)
+function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array,HRTFpath)
 
 startup_script();
 [rownum,colnum]=size(s);
@@ -27,7 +27,7 @@ end
 % HRTFpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';  
 % WignerDpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
 
-HRTFpath = 'ToolboxApp/data/earoHRIR_KU100_Measured_2702Lebedev.mat';  
+% HRTFpath = 'ToolboxApp/data/earoHRIR_KU100_Measured_2702Lebedev.mat';  
 WignerDpath = 'ToolboxApp/data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
 
 %% ================= parameters/flags - general
