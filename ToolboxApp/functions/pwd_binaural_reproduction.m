@@ -89,7 +89,7 @@ anm_f = anm_f(1:NFFT/2+1, :);
 % vector of frequencies
 fVec = (0:NFFT-1)'/NFFT * fs;
 fVec_pos = fVec(1 : NFFT/2 + 1);
-
+clear fVec
 if DisplayProgress
     % Spherical coordinates of direct sound 
     direct_sound_rel_cart = parametric_rir.relative_pos(1, :);
@@ -132,7 +132,7 @@ anm_est_t = anm_est_t(1:size(p_array_t, 1), :);
 anm_est_f = fft(anm_est_t, NFFT, 1);
 % remove negative frequencies
 anm_est_f = anm_est_f(1:NFFT/2+1, :);
-
+clear anm_est_t
 %% ================= Generate binaural signals - Ambisonics format
 if DisplayProgress
     fprintf('\n');
@@ -148,7 +148,7 @@ elseif strcmp(anm_to_reproduce, "est")
     anm_BR = anm_est_f.';       
     anm_BR = [anm_BR, conj(anm_BR(:, end-1:-1:2))];  % just to be consistent size-wise
 end
-
+clear anm_f anm_est_f
 % load HRTF to an hobj struct -
 load(HRTFpath);                     % hobj is HRIR earo object - domains are given in hobj.dataDomain
 hobj.shutUp = ~DisplayProgress;     % shutUp parameter of hobj
