@@ -17,7 +17,7 @@ A matlab app for various signal processing algorithms.
 
 For including your own algorithm in this app, follow this steps:
 1.  create a file in the functions folder with a function that get the signal and other parameters as you wish.
-2.  create a new processor in the processor folder using the example.
+2.  create a new processor class in the processor folder using the example.
 3.  your processor should contain:
      1.  a "process" funtion that get signal, frequecy and room parameter and return the new signal.
      2.  all of your algorithm parameters inside of a dictionary (matlab's Map object) with the corresponding key. make shure to use valuable keys, 
@@ -27,9 +27,10 @@ For including your own algorithm in this app, follow this steps:
      
 ![image](https://user-images.githubusercontent.com/13310488/111609309-d45aa100-87e2-11eb-8a22-624eb1230769.png)
 
-5. add your algorithm's name to the list
-
-![image](https://user-images.githubusercontent.com/13310488/111609811-58ad2400-87e3-11eb-9bb9-a1aa554dc556.png)
+5. add your tab to the tabs Map structure in the sturtUpFcn:
+```
+app.tabs('YOUR-ALGORITHM-NAME') = app.YourTab;
+```
 
 6. in the code view go to startUpfcn, in the processor section construct your processor and bind it to the GUI component. for example:
 ```
