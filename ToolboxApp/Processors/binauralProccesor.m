@@ -17,6 +17,7 @@ classdef binauralProccesor < BaseProcess
                 
             obj.args('N_array')= 4;
             obj.args('r_array')= 0.042;
+            obj.args('ShOrder')=15;
             obj.args('HRTFpath') = 'ToolboxApp/data/earoHRIR_KU100_Measured_2702Lebedev.mat';
         end
         
@@ -25,7 +26,7 @@ classdef binauralProccesor < BaseProcess
             % use the global room parameters and the processor agruments to
             % process the signal. you can either use an external function
             % or do everything in place.
-            [s,fs] = pwd_binaural_reproduction(s,fs,roomDim,sourcePos,arrayPos,R,obj.args("N_array"),obj.args("r_array"),obj.args('HRTFpath'));
+            [s,fs] = pwd_binaural_reproduction(s,fs,roomDim,sourcePos,arrayPos,R,obj.args("N_array"),obj.args("r_array"),obj.args('HRTFpath'),obj.args('ShOrder'));
         end
     end
 end

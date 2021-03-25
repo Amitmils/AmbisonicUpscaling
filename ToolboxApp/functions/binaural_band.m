@@ -9,7 +9,7 @@ res =0;
 for k=1:length(files)
     [sound,fs] = audioread(strcat(path,files(k)));
     sound = sum(sound,2);
-    x =[];
+%     x =[];
 %     for i=1:44100:length(sound)
 %         disp(sourcePos(1+(k-1)*3:k*3))
 %         [tmp,fs] = pwd_binaural_reproduction(sound(i:min(i+44100,length(sound))),fs,Room,sourcePos(1+(k-1)*3:k*3),arrayPos,0.9,N_array,r_array,'ToolboxApp/data/earoHRIR_KU100_Measured_2702Lebedev.mat');
@@ -20,3 +20,4 @@ for k=1:length(files)
 end
 % fs = 44100;
 soundsc(res, fs);
+audiowrite(strcat('t.wav'),app.x,app.fs);

@@ -16,7 +16,7 @@
 % clearvars;
 % close all;
 % clc;
-function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array,HRTFpath)
+function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array,HRTFpath,N_PW)
 
 startup_script();
 [rownum,colnum]=size(s);
@@ -43,8 +43,8 @@ sphereType = "open";            % "open" / "rigid"
 [th_array, ph_array, weights_array] = sampling_schemes.t_design(N_array);                
 
 %% ================= parameters/flags - source
-N_PW = 15;                                      % SH order of plane-wave synthesis
-sig_path = "+examples/data/female_speech.wav";  % location of .wav file - signal
+% N_PW = 15;                                      % SH order of plane-wave synthesis
+% sig_path = "+examples/data/female_speech.wav";  % location of .wav file - signal
 
 %% ================= parameters/flags - room
 % roomDim =       [15.5 9.8 7.5];     % Room Dimensions (L,W,H) [m]
