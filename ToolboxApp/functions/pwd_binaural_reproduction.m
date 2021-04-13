@@ -77,7 +77,8 @@ if DisplayProgress
 end
 figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
 xlabel('Time [sec]');
-anm_t = fftfilt(hnm, s); 
+% anm_t = fftfilt(hnm, s); 
+anm_t = hnm; 
 % soundsc(real(anm_t(:,1)), fs);
 
 % transform to frequency domain
@@ -194,6 +195,9 @@ else
 end
 % trim to size before power of 2 padding
 bin_sig_t(size(anm_t, 1) + 1:end,:) = [];
+
+% Finally, filter binaural RIR with signal
+bin_sig_t = fftfilt(bin_sig_t, s);    
 
 if DisplayProgress
     fprintf('\n');
