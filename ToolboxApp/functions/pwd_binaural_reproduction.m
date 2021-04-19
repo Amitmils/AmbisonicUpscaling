@@ -66,7 +66,7 @@ headRotation = false;            % true: generate rotated version of anm over az
 %% generate RIR and convolve with speech
 % [s, fs] = audioread(sig_path);
 
-[hnm, parametric_rir] = image_method.calc_rir(fs, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
+[hnm, parametric_rir] = image_method.calc_rir(fs/2, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
 T60 = RoomParams.T60(hnm(:,1), fs); 
 CriticalDist = RoomParams.critical_distance_diffuse(roomDim, R);
 if DisplayProgress
@@ -75,8 +75,8 @@ if DisplayProgress
     fprintf("T60 = %.2f sec\n", T60);
     disp(['Critical distance = ' num2str(CriticalDist) ' m']);
 end
-figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
-xlabel('Time [sec]');
+% figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
+% xlabel('Time [sec]');
 % anm_t = fftfilt(hnm, s); 
 anm_t = hnm; 
 % soundsc(real(anm_t(:,1)), fs);
