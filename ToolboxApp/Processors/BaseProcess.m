@@ -11,13 +11,16 @@ classdef BaseProcess
     methods
         
         
-        function res=bind(obj,component,argnm,r)
+        function res=bind(obj,component,argnm,r,callb)
             
             function callback(src,e,r)
                 if r
                     src.Value = round(src.Value);
                 end
                 obj.args(argnm) = src.Value;
+                 if exist('callb','var')
+                    callb(src.Value)
+                end
             end
             if exist('r','var')
                 component.ValueChangedFcn ={@callback,true};
