@@ -20,8 +20,11 @@ clc;
 startup_script();
 
 %% ================= IMPORTANT!!! add path to HRTF and WignerD database from GoogleDrive ACLToolbox(in hobj format)
-HRTFpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';  
-WignerDpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
+% HRTFpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';  
+% WignerDpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
+
+HRTFpath = '+examples/data/earoHRIR_KU100_Measured_2702Lebedev.mat';  
+WignerDpath = '+examples/data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
 
 %% ================= parameters/flags - general
 c = soundspeed();               % speed of sound [m/s]
