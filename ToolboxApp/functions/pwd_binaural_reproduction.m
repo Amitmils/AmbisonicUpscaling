@@ -16,7 +16,7 @@
 % clearvars;
 % close all;
 % clc;
-function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array,HRTFpath,N_PW)
+function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array,HRTFpath,N_PW,headRotation,rot_idx)
 
 startup_script();
 [rownum,colnum]=size(s);
@@ -53,7 +53,7 @@ sphereType = "open";            % "open" / "rigid"
 % R = 0.9;                            % walls refelection coeff
 
 %% ================= parameters/flags - binaural reproduction
-anm_to_reproduce = "est";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
+anm_to_reproduce = "sim";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
 if strcmp(anm_to_reproduce, "sim")
     N_BR = N_PW;                % SH order of Ambisonics signal
 elseif strcmp(anm_to_reproduce, "est")
@@ -61,7 +61,7 @@ elseif strcmp(anm_to_reproduce, "est")
 else
     error("Not a valid anm type for reproduction");
 end
-headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
+% headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
 %% generate RIR and convolve with speech
 % [s, fs] = audioread(sig_path);
@@ -185,7 +185,7 @@ end
 %% Transform binaural signal to time domain and listen
 if headRotation
     % choose a single rotation index for listening
-    rot_idx = 1;
+%     rot_idx = 1;
     
     % create the binaural signal from selected rotation index
     bin_sig_t = [squeeze(bin_sig_rot_t(:, 1, rot_idx)),...
@@ -209,12 +209,4 @@ end
 % Listen to results - use headphones
 % soundsc(bin_sig_t, fs);
 end
-
-
-
-
-
-
-
-
 
