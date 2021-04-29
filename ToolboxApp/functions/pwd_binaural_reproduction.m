@@ -210,11 +210,3 @@ end
 % soundsc(bin_sig_t, fs);
 end
 
-
-
-
-
-
-
-
-
