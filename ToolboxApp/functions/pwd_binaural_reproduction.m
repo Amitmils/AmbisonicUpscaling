@@ -37,7 +37,7 @@ DisplayProgress = true;         % true: display progress on command window
 %% ================= parameters/flags - spherical array
 % N_array = 4;                    % SH order of array
 % r_array = 0.042;                % array radius. 0.042 is similar to EM32 array
-sphereType = "open";            % "open" / "rigid"
+sphereType = "rigid";            % "open" / "rigid"
 
 %================= generate spherical coordinates of spherical array   
 [th_array, ph_array, weights_array] = sampling_schemes.t_design(N_array);                
@@ -66,7 +66,7 @@ end
 %% generate RIR and convolve with speech
 % [s, fs] = audioread(sig_path);
 
-[hnm, parametric_rir] = image_method.calc_rir(fs/2, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
+[hnm, parametric_rir] = image_method.calc_rir(fs, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
 T60 = RoomParams.T60(hnm(:,1), fs); 
 CriticalDist = RoomParams.critical_distance_diffuse(roomDim, R);
 if DisplayProgress
@@ -108,32 +108,36 @@ if DisplayProgress
     disp(['anm_t is of size (samples, (N_PW + 1)^2) = (' num2str(size(anm_t, 1),'%d') ', ' num2str(size(anm_t, 2),'%d') ')']);
 end
 
-%% ================= Calculate array measurements  
-p_array_t = anm2p(anm_t(:, 1:(N_array + 1)^2), fs, r_array, [th_array, ph_array], sphereType);
-% trim zeros at the end of anm_est_t
-p_array_t = p_array_t(1:size(anm_t, 1), :);
-% soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
+%% Simulate array measurements and PWD if anm_to_reproduce='est'
+if strcmp(anm_to_reproduce, "est")
+    %% ================= Calculate array measurements  
+    p_array_t = anm2p(anm_t(:, 1:(N_array + 1)^2), fs, r_array, [th_array, ph_array], sphereType);
+    % trim zeros at the end of anm_est_t
+    p_array_t = p_array_t(1:size(anm_t, 1), :);
+    % soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
 
-if DisplayProgress
-    fprintf('\n');
-    disp('Array recordings dimensions:');
-    disp('===========================');
-    disp(['p_array_t is of size (samples, mics) = (' num2str(size(p_array_t, 1),'%d') ', ' num2str(size(p_array_t, 2),'%d') ')']);
+    if DisplayProgress
+        fprintf('\n');
+        disp('Array recordings dimensions:');
+        disp('===========================');
+        disp(['p_array_t is of size (samples, mics) = (' num2str(size(p_array_t, 1),'%d') ', ' num2str(size(p_array_t, 2),'%d') ')']);
+    end
+
+
+    %% ================= Plane wave decomposition
+    snr_db = 40;
+    anm_est_t = p2anm(p_array_t, fs, [th_array, ph_array], r_array, sphereType, snr_db, N_array);
+    % trim zeros at the end of anm_est_t
+    anm_est_t = anm_est_t(1:size(p_array_t, 1), :);
+    % soundsc(real(anm_est_t(:,1)), fs);
+
+    % transform to frequency domain
+    anm_est_f = fft(anm_est_t, NFFT, 1);
+    % remove negative frequencies
+    anm_est_f = anm_est_f(1:NFFT/2+1, :);
+    clear anm_est_t
 end
 
-
-%% ================= Plane wave decomposition
-snr_db = 40;
-anm_est_t = p2anm(p_array_t, fs, [th_array, ph_array], r_array, sphereType, snr_db, N_array);
-% trim zeros at the end of anm_est_t
-anm_est_t = anm_est_t(1:size(p_array_t, 1), :);
-% soundsc(real(anm_est_t(:,1)), fs);
-
-% transform to frequency domain
-anm_est_f = fft(anm_est_t, NFFT, 1);
-% remove negative frequencies
-anm_est_f = anm_est_f(1:NFFT/2+1, :);
-clear anm_est_t
 %% ================= Generate binaural signals - Ambisonics format
 if DisplayProgress
     fprintf('\n');
@@ -171,9 +175,13 @@ if hobj.fs ~= fs
 end
 
 
-% General function to generates binaural signals with or without head rotations over azimuth
-% according to [3] eq. (9)
-[bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath);
+%%General function to generates binaural signals with or without head rotations over azimuth according to [3] eq. (9)
+
+%[bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath); % this function
+%makes all possible rotations -> good for head-tracking with device
+
+[bin_sig_rot_t, ~] = BinSigGen_HeadRotation_1RotIdx_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath, rot_idx);
+
 % *** NOTE: it is much more efficient to use RIR-anm instead of signals containing
 % anm, but this is an example for binaural reproduction from estimated anm.
 % If RIR is given, use it instead of anm_BR ***
@@ -183,16 +191,7 @@ if DisplayProgress
 end
 
 %% Transform binaural signal to time domain and listen
-if headRotation
-    % choose a single rotation index for listening
-%     rot_idx = 1;
-    
-    % create the binaural signal from selected rotation index
-    bin_sig_t = [squeeze(bin_sig_rot_t(:, 1, rot_idx)),...
-        squeeze(bin_sig_rot_t(:, 2, rot_idx))];
-else      
-    bin_sig_t = bin_sig_rot_t;    
-end
+bin_sig_t = bin_sig_rot_t;
 % trim to size before power of 2 padding
 bin_sig_t(size(anm_t, 1) + 1:end,:) = [];
 
