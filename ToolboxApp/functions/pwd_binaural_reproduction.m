@@ -79,6 +79,7 @@ end
 % xlabel('Time [sec]');
 % anm_t = fftfilt(hnm, s); 
 anm_t = hnm; 
+clear hnm
 % soundsc(real(anm_t(:,1)), fs);
 
 % transform to frequency domain
@@ -89,8 +90,8 @@ anm_f = anm_f(1:NFFT/2+1, :);
 
 % vector of frequencies
 fVec = (0:NFFT-1)'/NFFT * fs;
-fVec_pos = fVec(1 : NFFT/2 + 1);
-clear fVec
+fVec_pos = fVec(1 : NFFT/2 + 1); %why?
+clear fVec fVec_pos
 if DisplayProgress
     % Spherical coordinates of direct sound 
     direct_sound_rel_cart = parametric_rir.relative_pos(1, :);
@@ -181,7 +182,7 @@ end
 %makes all possible rotations -> good for head-tracking with device
 
 [bin_sig_rot_t, ~] = BinSigGen_HeadRotation_1RotIdx_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath, rot_idx);
-
+clear anm_BR
 % *** NOTE: it is much more efficient to use RIR-anm instead of signals containing
 % anm, but this is an example for binaural reproduction from estimated anm.
 % If RIR is given, use it instead of anm_BR ***
@@ -192,6 +193,7 @@ end
 
 %% Transform binaural signal to time domain and listen
 bin_sig_t = bin_sig_rot_t;
+clear bin_sig_rot_t
 % trim to size before power of 2 padding
 bin_sig_t(size(anm_t, 1) + 1:end,:) = [];
 

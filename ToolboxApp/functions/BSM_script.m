@@ -94,7 +94,7 @@ T60 = RoomParams.T60(hnm(:,1), fs);
 fprintf("T60 = %.2f sec\n", T60);
 % figure; plot((0:size(hnm,1)-1)/desired_fs, real(hnm(:,1))); xlabel('Time [sec]'); % plot the RIR of a00
 anm_t = fftfilt(hnm, s);
-
+clear hnm
 %% ================= HRTFS preprocessing
 % load HRIRs
 % N_HRTF = 30;
@@ -117,7 +117,7 @@ load(WignerDpath);
 N_HRTF_rot = 30;
 DN = (N_HRTF_rot + 1)^2; % size of the wignerD matrix
 D_allAngles = D(:, 1 : DN);
-
+clear D
 %% ==================Create BSM struct
 BSMobj.freqs_sig = freqs_sig;
 BSMobj.N_PW = N_PW;    
@@ -237,22 +237,22 @@ for m = 1:length(M)
     end
     
 end
-
+clear p_array_t p_array_t_zp V_k
 %% Ambisonics format reproduction of anm
 %%TODO: add equalization support
 % headRotation = true; 
 rotAngles = head_rot_az;
 N_BR = 14;
 % DisplayProgress = true;
-bin_sig_rot_t = BinauralReproduction_from_anm(anm_t,...
-    HRTFpath, fs, N_BR, headRotation, rotAngles, WignerDpath);
-
+% bin_sig_rot_t = BinauralReproduction_from_anm(anm_t,...
+%     HRTFpath, fs, N_BR, headRotation, rotAngles, WignerDpath);
+% 
 
 %% Listen to results
-p_BSM_cmplx_t = cat(2, p_BSM_cmplx_t_l, p_BSM_cmplx_t_r);
+% p_BSM_cmplx_t = cat(2, p_BSM_cmplx_t_l, p_BSM_cmplx_t_r);
 p_BSM_mag_t = cat(2, p_BSM_mag_t_l, p_BSM_mag_t_r);
-p_REF_t = bin_sig_rot_t;
-
+% p_REF_t = bin_sig_rot_t;
+end
 %soundsc(p_BSM_cmplx_t, desired_fs);
 %soundsc(p_BSM_mag_t, desired_fs);
 %soundsc(p_REF_t, desired_fs);
