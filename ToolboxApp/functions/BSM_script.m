@@ -13,15 +13,12 @@
 % addpath(genpath('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general'));
 % cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/');
 
-function [p_BSM_mag_t, fs] = BSM_script(s, fs, roomDim, sourcePos, arrayPos, arrayType, rigidArray, R, r_array, M, HRTFpath, N_PW, headRotation, rot_idx)
+function [p_BSM_mag_t, fs] = BSM_script(anm_t, fs, arrayType, rigidArray,  r_array, M, HRTFpath, N_PW, headRotation, rot_idx)
 
 startup_script();
 rng('default');
 %??? taken from pwd_binaural_reproduction.m of ToolboxApp
-[rownum,colnum]=size(s);
-if colnum>1
-    s=sum(s,2);
-end
+
 %???
 
 % parameters/flags - array
@@ -89,12 +86,7 @@ freqs_sig(1) = 1/4 * freqs_sig(2); %to not divide by zero
 % sourcePos = [2 1 1.7]+0.1*randn(1,3);
 % arrayPos = [2 5 1]+0.1*randn(1,3);
 % R = 0.92; % walls refelection coeff
-[hnm, parametric_rir] = image_method.calc_rir(fs, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
-T60 = RoomParams.T60(hnm(:,1), fs);
-fprintf("T60 = %.2f sec\n", T60);
-% figure; plot((0:size(hnm,1)-1)/desired_fs, real(hnm(:,1))); xlabel('Time [sec]'); % plot the RIR of a00
-anm_t = fftfilt(hnm, s);
-clear hnm
+
 %% ================= HRTFS preprocessing
 % load HRIRs
 % N_HRTF = 30;

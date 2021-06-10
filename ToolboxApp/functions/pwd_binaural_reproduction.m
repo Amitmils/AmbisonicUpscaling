@@ -16,13 +16,13 @@
 % clearvars;
 % close all;
 % clc;
-function [bin_sig_t, fs] = pwd_binaural_reproduction(s, fs,roomDim,sourcePos,arrayPos,R,N_array,r_array,HRTFpath,N_PW,headRotation,rot_idx)
+function [bin_sig_t, fs] = pwd_binaural_reproduction(anm_t, fs,N_array,r_array,HRTFpath,N_PW,headRotation,rot_idx)
 
 startup_script();
-[rownum,colnum]=size(s);
-if colnum>1
-    s=sum(s,2);
-end
+% [rownum,colnum]=size(s);
+% if colnum>1
+%     s=sum(s,2);
+% end
 %% ================= IMPORTANT!!! add path to HRTF and WignerD database from GoogleDrive ACLToolbox(in hobj format)
 % HRTFpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';  
 % WignerDpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
@@ -32,7 +32,7 @@ WignerDpath = 'ToolboxApp/data/WignerDMatrix_diagN=32.mat';   % needed just for 
 
 %% ================= parameters/flags - general
 c = soundspeed();               % speed of sound [m/s]
-DisplayProgress = true;         % true: display progress on command window
+DisplayProgress = false;         % true: display progress on command window
 
 %% ================= parameters/flags - spherical array
 % N_array = 4;                    % SH order of array
@@ -66,20 +66,7 @@ end
 %% generate RIR and convolve with speech
 % [s, fs] = audioread(sig_path);
 
-[hnm, parametric_rir] = image_method.calc_rir(fs, roomDim, sourcePos, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
-T60 = RoomParams.T60(hnm(:,1), fs); 
-CriticalDist = RoomParams.critical_distance_diffuse(roomDim, R);
-if DisplayProgress
-    disp('Room parameters:');
-    disp('================');
-    fprintf("T60 = %.2f sec\n", T60);
-    disp(['Critical distance = ' num2str(CriticalDist) ' m']);
-end
-% figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
-% xlabel('Time [sec]');
-% anm_t = fftfilt(hnm, s); 
-anm_t = hnm; 
-clear hnm
+
 % soundsc(real(anm_t(:,1)), fs);
 
 % transform to frequency domain
@@ -198,7 +185,7 @@ clear bin_sig_rot_t
 bin_sig_t(size(anm_t, 1) + 1:end,:) = [];
 
 % Finally, filter binaural RIR with signal
-bin_sig_t = fftfilt(bin_sig_t, s);    
+% bin_sig_t = fftfilt(bin_sig_t, s);    
 
 if DisplayProgress
     fprintf('\n');
