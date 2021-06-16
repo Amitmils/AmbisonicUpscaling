@@ -1,7 +1,7 @@
 function anm_t = calc_room_anm_t(s, fs,roomDim,sourcePos,arrayPos,R,N_PW)
 %CALC_ROOM_ANM_T Summary of this function goes here
 %   Detailed explanation goes here
-max_length =0
+max_length =0;
 for k=1:length(s)
     [~,colnum]=size(s{k});
     if colnum>1

@@ -28,7 +28,7 @@ classdef binauralProccesor < BaseProcess
             % use the global room parameters and the processor agruments to
             % process the signal. you can either use an external function
             % or do everything in place.
-            sourcePos = repmat({sourcePos},1,length(s));
+            
             anm_t = calc_room_anm_t(s, fs,roomDim,sourcePos,arrayPos,R,obj.args('ShOrder'));
             [s,fs] = pwd_binaural_reproduction(anm_t,fs,obj.args("N_array"),obj.args("r_array"),obj.args('HRTFpath'),obj.args('ShOrder'),obj.args('headRotation'),360-obj.args('rot_idx'));
         end

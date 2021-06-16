@@ -3,12 +3,17 @@ classdef signal_holder
         name
         signal
         fs
+        position
     end
     methods
         function obj = signal_holder(name,signal,fs)
             obj.name = name;
             obj.signal = signal;
             obj.fs = fs;
+            obj.position = [10 3 1.7];
+        end
+        function obj = set_position(obj, position)
+             obj.position = position;
         end
         function obj = play(obj,device)
              mindata = min(min(obj.signal));
