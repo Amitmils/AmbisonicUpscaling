@@ -4,6 +4,7 @@ classdef signal_holder
         signal
         fs
         position
+        color
     end
     methods
         function obj = signal_holder(name,signal,fs)
@@ -11,9 +12,14 @@ classdef signal_holder
             obj.signal = signal;
             obj.fs = fs;
             obj.position = [10 3 1.7];
+            cmap1 = colorcube();
+            obj.color = cmap1(randi(length(cmap1)),:);
         end
         function obj = set_position(obj, position)
              obj.position = position;
+        end
+        function obj = set_color(obj, color)
+             obj.color = color;
         end
         function obj = play(obj,device)
              mindata = min(min(obj.signal));
