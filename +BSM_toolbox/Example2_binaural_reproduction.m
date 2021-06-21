@@ -140,7 +140,7 @@ for m = 1:length(M)
     %% ================= calculate array measurements   
     N_SV = N_PW;
     p_array_t = anm2p(anm_t(:, 1:(N_SV + 1)^2), desired_fs, r_array, [th_array.', ph_array.'], sphereType);
-    % trim zeros at the end of anm_est_t
+    % trim zeros at the end of p_array_t
     p_array_t = p_array_t(1:size(anm_t, 1), :);
     %p_array_t = circshift(p_array_t, round((size(p_array_t, 1) - 1) / 2), 1);        
     % soundsc(real([p_array_t(:, 1).'; p_array_t(:, 20).']), desired_fs);

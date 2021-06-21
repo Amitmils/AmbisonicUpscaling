@@ -16,11 +16,11 @@ startup_script();
 rng('default');
 
 % parameters/flags - array
-filt_len = 0.032; %0.032;                              % filters (BSM/HRTF) length [sec]
+filt_len = 0.032;                                      % filters (BSM/HRTF) length [sec]
 arrayType = 1;                                         % 0 - 90 equiangle horizontal plane 1m, 1 - 110 equiangle horizontal plane 3m
 head_rot_az = ...
-    wrapTo2Pi(deg2rad([0 45 90]));                         % vector of head rotations [rad]
-normSV = false;                                         % true - normalize steering vectors
+    wrapTo2Pi(deg2rad([0 45 90]));                     % vector of head rotations [rad]
+normSV = false;                                        % true - normalize steering vectors
 
 % parameters/flags - general
 c = 343;                                               % speed of sound [m/s]
