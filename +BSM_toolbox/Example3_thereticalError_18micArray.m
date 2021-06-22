@@ -11,6 +11,8 @@ restoredefaultpath;
 % add ACLtoolbox path
 addpath(genpath('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general'));
 cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/');
+% add export_fig toolbox to path
+addpath(genpath('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302/'));
 
 startup_script();
 rng('default');
@@ -25,16 +27,15 @@ normSV = false;                                        % true - normalize steeri
 % parameters/flags - general
 c = 343;                                               % speed of sound [m/s]
 desired_fs = 48000;                                    % choose samplong frequency in Hz
-saveFiles = false;                                     % save MATLAB files before time interpolation?
-save_plot_flag = false;
+save_plot_flag = true;
 
 % parameters/flags - BSM design
 inv_opt = 1;                                           % opt=1 -> ( (1 / lambda) * (A * A') + eye )  |||| opt2=1 -> ((A * A') + lambda * eye);
 
-magLS = true;                                          % true - magLS, false - complex LS
-f_cut_magLS = 1500;                                    % above cutoff frequency use MagLS
+magLS = false;                                          % true - magLS, false - complex LS
+f_cut_magLS = 0;                                    % above cutoff frequency use MagLS
 tol_magLS = 1e-20;    
-max_iter_magLS = 1E5;
+max_iter_magLS = 1E4;
 %noise
 SNR = 20;                                              % assumed sensors SNR [dB]
 sig_n = 0.1;
@@ -58,7 +59,7 @@ if magLS
     %LS_title = ['MagLS max-iter=',num2str(max_iter_number_magLS, '%1.1e'),' tol=',num2str(tol_magLS,'%1.1e')];
     LS_title = ['MagLS_fcut=',num2str(f_cut_magLS)];
 else
-    LS_title = 'RegLS';
+    LS_title = 'CmplxLS';
 end
 
 %% ================= Load Array Data
@@ -217,10 +218,11 @@ for h = 1:length(head_rot_az)
     legend('location', 'east', 'interpreter', 'latex');
     set(gca, 'fontsize', 20, 'linewidth', 2, 'fontname', 'times');
     xlim([75 10000]);
+    ylim([-50 0]);
 
     %savefig
     if save_plot_flag
-        export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/BSM/plots/err_pl_',arrayTypeLbl,'_arrayRot=',num2str(rad2deg(head_rot_az(h))),'.png'], '-transparent', '-r300');
+        export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/BSM/plots/err_pl_',arrayTypeLbl,'_',LS_title,'_arrayRot=',num2str(rad2deg(head_rot_az(h))),'.png'], '-transparent', '-r300');
     end
 end
 
