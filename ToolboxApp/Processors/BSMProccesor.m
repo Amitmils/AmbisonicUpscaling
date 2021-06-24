@@ -46,7 +46,7 @@ classdef BSMProccesor < BaseProcess
                 case 'Rigid'
                     rigidArray_num = 1;
             end
-            anm_t = calc_room_anm_t(s, fs,roomDim,sourcePos,arrayPos,R,obj.args('N_PW'));
+            [anm_t,fs] = calc_room_anm_t(s, fs,roomDim,sourcePos,arrayPos,R,obj.args('N_PW'));
             
             [p_BSM_mag_t, fs] = BSM_script(anm_t, fs,...
                 array_type_num, rigidArray_num,  obj.args('r_array'),...
