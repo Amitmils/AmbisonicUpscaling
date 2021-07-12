@@ -1,3 +1,4 @@
+
 %% This script holds the parameters of BSM filters and calls a function that generates them
 
 % Date created: March 18, 2021
@@ -194,6 +195,7 @@ if saveFiles
         'c_BSM_comp_l', 'c_BSM_comp_r', 'c_BSM_NoComp_l', 'c_BSM_NoComp_r',...        
         'BSMobj', 'arrayTypeTxt');
 end
+
 
 
 

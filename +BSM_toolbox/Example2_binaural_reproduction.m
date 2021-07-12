@@ -1,3 +1,4 @@
+
 %% This script generates binaural signals with BSM (complex and magnitude LS versions)
 
 % Date created: November 24, 2020
@@ -241,6 +242,7 @@ p_REF_t = bin_sig_rot_t;
 %soundsc(p_BSM_cmplx_t, desired_fs);
 %soundsc(p_BSM_mag_t, desired_fs);
 %soundsc(p_REF_t, desired_fs);
+
 
 
 
