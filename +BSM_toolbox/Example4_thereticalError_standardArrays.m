@@ -1,7 +1,6 @@
+%% This script calculates the theoretical error of BSM with the spherical/circular/semi-circular array
 
-%% This script holds the parameters of BSM filters and calls a function that generates them
-
-% Date created: March 18, 2021
+% Date created: June 21, 2021
 % Created by:   Lior Madmoni
 
 clearvars;
@@ -30,7 +29,7 @@ normSV = true;                                         % true - normalize steeri
 c = 343;                                               % speed of sound [m/s]
 desired_fs = 48000;                                    % choose samplong frequency in Hz
 N_PW = 30;                                             % SH order of plane-wave synthesis
-saveFiles = false;                                     % save MATLAB files before time interpolation?
+save_plot_flag = false;                                     % save MATLAB files before time interpolation?
 
 % parameters/flags - BSM design
 inv_opt = 1;                                           % opt=1 -> ( (1 / lambda) * (A * A') + eye )  |||| opt2=1 -> ((A * A') + lambda * eye);
@@ -114,12 +113,8 @@ BSMobj.sphereType = sphereType;
 
 %% ================= BSM filters calculation
 % ===== initialization
-% head rotation compensation during recording
-c_BSM_comp_l    = cell(length(M), length(array_rot_az));
-c_BSM_comp_r    = cell(length(M), length(array_rot_az));
-% head rotation without compensation during recording
-c_BSM_NoComp_l    = cell(length(M), length(array_rot_az));
-c_BSM_NoComp_r    = cell(length(M), length(array_rot_az));
+err_pl = zeros(length(freqs_sig), length(array_rot_az));
+err_pr = zeros(length(freqs_sig), length(array_rot_az));
 
 for ar = 1 : length(array_rot_az)    
     tic;
@@ -131,34 +126,46 @@ for ar = 1 : length(array_rot_az)
         %% Update BSM object 
         BSMobj.n_mic = n_mic;                
         BSMobj.th_array = th_array;
-        BSMobj.ph_array = ph_array;        
+        %no compensation
+%         BSMobj.ph_array = ph_array;
+        %with compensation
+        BSMobj.ph_array = ph_rot_array;
+        
+        %% ================= calculate array steering vectors (for BSM filters)        
+        N_SV = N_PW;        
+        V_k = CalculateSteeringVectors(BSMobj, N_SV, th_BSMgrid_vec, ph_BSMgrid_vec); 
+        V_k = permute(V_k, [3 2 1]);
         
         %% ================= Generate BSM filters in frequency domain
-        %===Non-compensated version of BSM - use original array orientation
-        % calculate array steering vectors (for BSM filters)        
-        N_SV = N_PW;        
-        V_k = CalculateSteeringVectors(BSMobj, N_SV, th_BSMgrid_vec, ph_BSMgrid_vec); 
-        V_k = permute(V_k, [3 2 1]);    
-        [c_BSM_NoComp_l_tmp, c_BSM_NoComp_r_tmp] = BSM_toolbox.GenerateBSMfilters_faster(BSMobj, V_k, hobj_freq_grid);
-        %===The compensated version of BSM - use rotated array orientation
-        BSMobj.ph_array = ph_rot_array;
-        % calculate array steering vectors (for BSM filters)
-        N_SV = N_PW;        
-        V_k = CalculateSteeringVectors(BSMobj, N_SV, th_BSMgrid_vec, ph_BSMgrid_vec); 
-        V_k = permute(V_k, [3 2 1]);    
-        [c_BSM_comp_l_tmp, c_BSM_comp_r_tmp] = BSM_toolbox.GenerateBSMfilters_faster(BSMobj, V_k, hobj_freq_grid);
-                
-        %% Post-processing BSM filters     
-        [c_BSM_comp_l_tmp_time_cs, c_BSM_comp_r_tmp_time_cs] = ...
-            BSM_toolbox.PostProcessBSMfilters(BSMobj, c_BSM_comp_l_tmp, c_BSM_comp_r_tmp);
-        [c_BSM_NoComp_l_tmp_time_cs, c_BSM_NoComp_r_tmp_time_cs] = ...
-            BSM_toolbox.PostProcessBSMfilters(BSMobj, c_BSM_NoComp_l_tmp, c_BSM_NoComp_r_tmp);
+        % Non-compensated version of BSM - use original array orientation
+%         [c_BSM_NoComp_l_tmp, c_BSM_NoComp_r_tmp] = BSM_toolbox.GenerateBSMfilters_faster(BSMobj, V_k, hobj_freq_grid);
+        % The compensated version of BSM - use rotated array orientation        
+        [c_BSM_comp_l, c_BSM_comp_r] = BSM_toolbox.GenerateBSMfilters_faster(BSMobj, V_k, hobj_freq_grid);
         
-        % save in cell format
-        c_BSM_comp_l{n, ar} = c_BSM_comp_l_tmp_time_cs;
-        c_BSM_comp_r{n, ar} = c_BSM_comp_r_tmp_time_cs;
-        c_BSM_NoComp_l{n, ar} = c_BSM_NoComp_l_tmp_time_cs;
-        c_BSM_NoComp_r{n, ar} = c_BSM_NoComp_r_tmp_time_cs;
+        %% ================= error calculation
+        for f = 1:length(freqs_sig)
+            % HRTFs
+            h_l = hobj_freq_grid.data(:, f, 1);
+            h_r = hobj_freq_grid.data(:, f, 2);
+
+            if ~magLS
+                % error for complex LS
+                err_pl(f, ar) = sig_s * norm(V_k(:, :, f)' * c_BSM_comp_l(:, f) - conj(h_l), 2)^2 + sig_n * norm(c_BSM_comp_l(:, f), 2)^2;
+                err_pl(f, ar) = err_pl(f, ar) / (sig_s * norm(conj(h_l), 2)^2);
+                err_pl(f, ar) = sqrt(err_pl(f, ar));
+                err_pr(f, ar) = sig_s * norm(V_k(:, :, f)' * c_BSM_comp_r(:, f) - conj(h_r), 2)^2 + sig_n * norm(c_BSM_comp_r(:, f), 2)^2;
+                err_pr(f, ar) = err_pr(f, ar) / (sig_s * norm(conj(h_r), 2)^2);
+                err_pr(f, ar) = sqrt(err_pr(f, ar));
+            else
+                % error for mag LS
+                err_pl(f, ar) = sig_s * norm(abs(V_k(:, :, f)' * c_BSM_comp_l(:, f)) - abs(h_l), 2)^2 + sig_n * norm(c_BSM_comp_l(:, f), 2)^2;
+                err_pl(f, ar) = err_pl(f, ar) / (sig_s * norm(conj(h_l), 2)^2);
+                err_pl(f, ar) = sqrt(err_pl(f, ar));
+                err_pr(f, ar) = sig_s * norm(abs(V_k(:, :, f)' * c_BSM_comp_r(:, f)) - abs(h_r), 2)^2 + sig_n * norm(c_BSM_comp_r(:, f), 2)^2;
+                err_pr(f, ar) = err_pr(f, ar) / (sig_s * norm(conj(h_r), 2)^2);
+                err_pr(f, ar) = sqrt(err_pr(f, ar));
+            end
+        end
     
     end
             
@@ -179,24 +186,47 @@ for ar = 1 : length(array_rot_az)
 end
 fprintf('\n');
 
+%% Plots
+plt_colors = get(gca, 'colororder');
+plt_linwid = {5; 5; 5};
+plt_marker = {'+' ; 'o' ; '*'};    % { '+' ; 'o' ; '*'; '.'; 'x'; 'square'; 'diamond'; '^'; '>'; '<'; 'pentagram'}
+plt_lbls = true;
+
+for ar = 1:length(array_rot_az)
+
+    % error in binaural signal estimation as function of frequency
+    err_pl_dB = mag2db(err_pl(:, ar));
+    err_pr_dB = mag2db(err_pr(:, ar));
+%     figure('Position', [1, 1, 1280, 800]);
+    figure('Position', [1, 1, 800, 400]);
+    sp2 = semilogx(freqs_sig, err_pl_dB, 'linewidth', 7, 'DisplayName', 'left');
+    hold on;
+    sp2 = semilogx(freqs_sig, err_pr_dB, 'linewidth', 7, 'DisplayName', 'right');
+%     set(sp2, {'Marker'} , plt_marker );
+    grid on;
+    axis tight;
+    if plt_lbls
+        title({['Head rotation = ',num2str(rad2deg(array_rot_az(ar))),'$^{\circ}$']},...
+            {arrayTypeTxt}, 'interpreter', 'latex');
+
+        xlabel('Frequency (Hz)', 'interpreter', 'latex');
+        ylabel('$|| \hat{p}^{l,r}(k) - p^{l,r}(k) ||_2 / || p^{l,r}(k) ||_2$ (dB)', 'interpreter', 'latex');
+    end
+    legend('location', 'east', 'interpreter', 'latex');
+    set(gca, 'fontsize', 20, 'linewidth', 2, 'fontname', 'times');
+    xlim([75 10000]);
+
+    %savefig
+    if save_plot_flag
+        export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/BSM/plots/err_pl_',arrayTypeTxt,'_arrayRot=',num2str(rad2deg(array_rot_az(ar))),'.png'], '-transparent', '-r300');
+    end
+end
+
+%{
 clear c_BSM_comp_l_tmp_time_cs c_BSM_comp_r_tmp_time_cs c_BSM_NoComp_l_tmp_time_cs c_BSM_NoComp_r_tmp_time_cs
 clear c_BSM_comp_l_tmp c_BSM_comp_r_tmp c_BSM_NoComp_l_tmp c_BSM_NoComp_r_tmp
 BSMobj = rmfield(BSMobj,{'n_mic', 'th_array', 'ph_array'});
-
-
-%% Save mat files
-if saveFiles
-    time_now = datetime('now');
-    DateString = datestr(time_now, 30);
-    mkdir(['/+BSM_toolbox/Data/']);
-    
-    % save only BSM output
-    save(['/+BSM_toolbox/Data/BSMfilter_',arrayTypeTxt,'_N_PW=',num2str(N_PW),'_',LS_title,'_',DateString,'.mat'],...
-        'c_BSM_comp_l', 'c_BSM_comp_r', 'c_BSM_NoComp_l', 'c_BSM_NoComp_r',...        
-        'BSMobj', 'arrayTypeTxt');
-end
-
-
+%}
 
 
 
