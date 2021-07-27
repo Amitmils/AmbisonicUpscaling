@@ -1,11 +1,11 @@
-function bin_sig_rot_t = anm_HRTF_2_binaural(hobj, anm_f, N, headRotation, rotAngles, WignerDpath)
+function [bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_1RotIdx_ACL(hobj, anm_f, N, headRotation, WignerDpath, rot_idx)
 arguments
     hobj earo
     anm_f (:, :) double
-    N (1, 1) double    
+    N (1, 1) double
     headRotation (1, 1) logical = false
-    rotAngles (1, :) double = 0
     WignerDpath (1,1) string = ''
+    rot_idx (1, 1) double = 0
 end
 % This function generate BRIR with head rotation for a given HRTF (hobj)
 % and plane-waves anm
@@ -21,7 +21,10 @@ if headRotation
     D = load(WignerDpath);
     D = D.D;
     DN = (N + 1)^2; % size of the wignerD matrix
-    D_allAngles = D(:, 1 : DN);        
+    D_allAngles = D(:, 1 : DN);
+    
+    % choose rotation angles
+    rotAngles = deg2rad(rot_idx);
 else
     % no head rotation    
     rotAngles = deg2rad(0);
@@ -60,7 +63,7 @@ for angle_idx = 1:length(rotAngles)
     
     % Rotation matrix
     if headRotation
-        rot_idx = round(rad2deg(rotAngles(angle_idx)));
+%         rot_idx = round(rad2deg(rotAngles(angle_idx)));
         if rot_idx == 0
             rot_idx = 1;
         elseif rot_idx == 360
@@ -77,7 +80,8 @@ for angle_idx = 1:length(rotAngles)
     % Generate BRIR    
     % Ambisonics format binaural reproduction - see [3] eq. (9)
     pl_f = sum(anm_tilde .* Hnm_lt_rot, 1).';
-    pr_f = sum(anm_tilde .* Hnm_rt_rot, 1).';        
+    pr_f = sum(anm_tilde .* Hnm_rt_rot, 1).';
+    
     plr_f = [pl_f, pr_f];
     % pad negative frequencies with zeros (has no effect since we use ifft with "symmetric" flag)
     plr_f(end+1:NFFT, :) = 0;
