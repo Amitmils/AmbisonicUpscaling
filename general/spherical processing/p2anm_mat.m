@@ -67,7 +67,7 @@ elseif trace(Sigma_n)>0
     for i=1:F
         H = Y.* B(i,:);
         Hh_trunc = sh_truncate(H', N, 1);
-        p2anm(:,:,i) = (Hh_trunc*Sigma_n_inv*H + Sigma_anm_inv)\H'*Sigma_n_inv; %#ok<MINV>
+        p2anm(:,:,i) = (Hh_trunc*Sigma_n_inv*H + Sigma_anm_inv)\H'*Sigma_n_inv; %#ok<MINV>  
     end
 else
     if ~((N+1)^2 >= Q && max(kr) <= N )
