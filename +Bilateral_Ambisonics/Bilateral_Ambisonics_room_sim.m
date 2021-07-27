@@ -8,15 +8,15 @@ clear
 %Simulation Parameters
 %----------------------
 N_ref = 40;                  %high order standart reproduction
-N = 4;                        %Synthesis SH order
+N = 8;                        %Synthesis SH order
 c=343;                      %speed of sound
-refCoef=0.75;               %reflecation coeff
+refCoef=0.6;               %reflecation coeff
 roomDims=[8,6,4];           % room dimensions
 r_0 = 0.0875;               %8.75cm head radius
 recPos=[4,3,1.7];           % Mic position (head center)
 %srcPos = [6.2,4.7,1.7];     %source position
 srcPos = [6,3,1.7];     %source position
-rot_ang = [0,0,-30*(pi/180)]; %[alpha,beta,gamma]
+rot_ang = [0,0,30*(pi/180)]; %[alpha,beta,gamma]
 
 %Plot room and recording geometry
 %=================================================
@@ -37,8 +37,8 @@ hrtf = load(filename);
 [Pt_full_sig,Pt_earAligned_sig] =  bilateral_room_sim_func(N_ref, N,...
     c,refCoef, roomDims, r_0, recPos, srcPos,s,fs,fs_sim,hrtf.hobj,rot_ang);
 
-
-
+% sound(Pt_full_sig,fs)
+% sound(Pt_earAligned_sig,fs)
 
 %Main functions
 %--------------------------------
@@ -80,7 +80,7 @@ q = double(fs_sim / gComDiv);
 %capture anm head center pre rotation N reference
 %------------------------------------------------
 disp('Capture anm head center...')
-[anmt_c_ref,~, roomParams] = get_anm(fs_sim, N_ref, roomDims, refCoef, srcPos, recPos, p,q);     %SH X freq and SH X time
+[anmt_c_ref,~, ~] = get_anm(fs_sim, N_ref, roomDims, refCoef, srcPos, recPos, p,q);     %SH X freq and SH X time
 
 %capture anm Left ear
 %---------------------------------------
@@ -92,6 +92,7 @@ disp('Capture anm Right ear...')
 [anmt_r,~, ~] = get_anm(fs_sim, N, roomDims, refCoef, srcPos, recPosR, p,q);     %SH X freq and SH X time
    
 
+disp('Rotate anms...')
 % Transform from time to frequency domain
 %make length of x even, and calculate frequency range
 anmt_c_ref  = anmt_c_ref.';
@@ -117,55 +118,11 @@ anmk_c_ref = anmk_c_ref(:,1:end/2+1);
 
 f=linspace(0,fs/2,nfft/2+1);    % frequency range
 w=2*pi*f;                       % radial frequency
-c=343;                          % speed of sound
 k=w/c;                          %wave number
 kr=k*head_vec(1);               %k*head_radius
 
-
-% make Wigner D
-% -------------------------------
-D       = WignerDM(N,-rot_ang(1),-rot_ang(2),-rot_ang(3));
-D_ref   = WignerDM(N_ref,-rot_ang(1),-rot_ang(2),-rot_ang(3));
-% Rotate the head
-% -------------------------------
-[x0,y0,z0]  = s2c(head_vec(2),head_vec(3),head_vec(1)); %left ear vector in cartesians
-LeftEar     = [x0,y0,z0];
-inc = abs(LeftEar) > 1e-10;
-LeftEar = LeftEar.*inc;
-
-[x0,y0,z0]  = s2c(head_vec(4),head_vec(5),head_vec(1)); %right ear vector in cartesians
-RightEar    = [x0,y0,z0];
-inc = abs(RightEar) > 1e-10;
-RightEar = RightEar.*inc;
-
-head_vec_rotated = head_vec;
-head_vec_rotated(3) = head_vec_rotated(3) + rot_ang(3);
-head_vec_rotated(5) = head_vec_rotated(5) + rot_ang(3);
-
-[x0,y0,z0]  = s2c(head_vec_rotated(2),head_vec_rotated(3),head_vec_rotated(1)); %left ear vector in cartesians
-LeftEar_r     = [x0,y0,z0];
-inc = abs(LeftEar_r) > 1e-10;
-LeftEar_r = LeftEar_r.*inc;
-
-[x0,y0,z0]  = s2c(head_vec_rotated(4),head_vec_rotated(5),head_vec_rotated(1)); %right ear vector in cartesians
-RightEar_r    = [x0,y0,z0];
-inc = abs(RightEar_r) > 1e-10;
-RightEar_r = RightEar_r.*inc;
-
-M = getRotationMat_ZYZ(-rot_ang(1),-rot_ang(2),-rot_ang(3));
-LeftEar_r_M = (M*LeftEar.').';
-RightEar_r_M = (M*RightEar.').';
-
-
-%Rotate anm's
-%---------------------------------------
-[a_grid,th_grid,ph_grid] = equiangle_sampling(N+3);
-Y=sh2(N,th_grid,ph_grid);
-Yp=diag(a_grid)*Y';
-
-anm_l_k_A       = anm_rotation(anmk_l,LeftEar,LeftEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
-anm_r_k_A       = anm_rotation(anmk_r,RightEar,RightEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
-anmk_c_ref      = D_ref*anmk_c_ref;    %left ear post rotation true mesurments
+[anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref,...
+    rot_ang,N,N_ref,head_vec,kr);
 
          
 
@@ -195,15 +152,7 @@ end
 H_l_nm_full = double(squeeze(hobj.data(:,:,1)).')*pY_inf; % SH transform
 H_r_nm_full = double(squeeze(hobj.data(:,:,2)).')*pY_inf; % SH transform
 
-
-% % Calculating ear-aligned HRTF coefficients
-% disp('Calculating ear-aligned HRTF coefficients...')
-% hobj_pc = calc_ear_hrtf_v6(hobj,head_vec,N,fs,c);
-% % hobj_pc = HRTF_phaseCorrection(hobj, 0);
-% H_l_nm_pc = double(squeeze(hobj_pc.data(:,:,1)).')*pY_ear; % SH transform
-% H_r_nm_pc = double(squeeze(hobj_pc.data(:,:,2)).')*pY_ear; % SH transform
-
-
+% Calculating ear-aligned HRTF coefficients
 disp('Calculating ear-aligned HRTF coefficients...');
 hobj_pc = HRTF_phaseCorrection(hobj, 0);
 H_l_nm_pc = double(squeeze(hobj_pc.data(:,:,1)).')*pY_ear; % SH transform
@@ -252,6 +201,53 @@ end
 
 %Functions
 %--------------------------------
+function [anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref,rot_ang,N,N_ref,head_vec,kr)
+    % make Wigner D
+    % -------------------------------
+    D       = WignerDM(N,-rot_ang(1),-rot_ang(2),-rot_ang(3));
+    D_ref   = WignerDM(N_ref,-rot_ang(1),-rot_ang(2),-rot_ang(3));
+    % Rotate the head
+    % -------------------------------
+    [x0,y0,z0]  = s2c(head_vec(2),head_vec(3),head_vec(1)); %left ear vector in cartesians
+    LeftEar     = [x0,y0,z0];
+    inc = abs(LeftEar) > 1e-10;
+    LeftEar = LeftEar.*inc;
+
+    [x0,y0,z0]  = s2c(head_vec(4),head_vec(5),head_vec(1)); %right ear vector in cartesians
+    RightEar    = [x0,y0,z0];
+    inc = abs(RightEar) > 1e-10;
+    RightEar = RightEar.*inc;
+
+    head_vec_rotated = head_vec;
+    head_vec_rotated(3) = head_vec_rotated(3) + rot_ang(3);
+    head_vec_rotated(5) = head_vec_rotated(5) + rot_ang(3);
+
+    [x0,y0,z0]  = s2c(head_vec_rotated(2),head_vec_rotated(3),head_vec_rotated(1)); %left ear vector in cartesians
+    LeftEar_r     = [x0,y0,z0];
+    inc = abs(LeftEar_r) > 1e-10;
+    LeftEar_r = LeftEar_r.*inc;
+
+    [x0,y0,z0]  = s2c(head_vec_rotated(4),head_vec_rotated(5),head_vec_rotated(1)); %right ear vector in cartesians
+    RightEar_r    = [x0,y0,z0];
+    inc = abs(RightEar_r) > 1e-10;
+    RightEar_r = RightEar_r.*inc;
+
+    M = getRotationMat_ZYZ(-rot_ang(1),-rot_ang(2),-rot_ang(3));
+    LeftEar_r_M = (M*LeftEar.').';
+    RightEar_r_M = (M*RightEar.').';
+
+
+    %Rotate anm's
+    %---------------------------------------
+    [a_grid,th_grid,ph_grid] = equiangle_sampling(N+3);
+    Y=sh2(N,th_grid,ph_grid);
+    Yp=diag(a_grid)*Y';
+
+    anm_l_k_A       = anm_rotation(anmk_l,LeftEar,LeftEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
+    anm_r_k_A       = anm_rotation(anmk_r,RightEar,RightEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
+    anmk_c_ref      = D_ref*anmk_c_ref;    %left ear post rotation true mesurments
+
+end
 function Pt = calc_pt(Pl,Pr)
     Pl(1)=real(Pl(1));                   Pr(1)=real(Pr(1));
     Pl(end)=real(Pl(end));               Pr(end)=real(Pr(end));
@@ -304,7 +300,6 @@ function [anmt_out,parametric, roomParams] = get_anm(fs_sim, N, roomDims,refCoef
     end
     anmt = anm_N_tmp;
 end
-
 function anm_k_D_c = anm_rotation(anm_k,micPos,micPos_r,D,Y,Yp,th_grid,ph_grid,kr)
 
     anm_k_D = D*anm_k;              %SH/Freq (wigner D)
@@ -319,7 +314,6 @@ function anm_k_D_c = anm_rotation(anm_k,micPos,micPos_r,D,Y,Yp,th_grid,ph_grid,k
 
 
 end
-
 function e_mat = build_e_mat_positive(micPos,micPos_r,th_grid,ph_grid,kr)
     th_s = th_grid;
     ph_s = ph_grid;
@@ -337,7 +331,6 @@ function e_mat = build_e_mat_positive(micPos,micPos_r,th_grid,ph_grid,kr)
 
 
 end
-
 function plot_room(recPos,srcPos_des,roomDims)
 %Plot room and recording geometry
 %------------------------------------------------
