@@ -7,16 +7,15 @@ clear
 %
 %Simulation Parameters
 %----------------------
-N_ref = 40;                  %high order standart reproduction
+N_ref = 4;                  %high order standart reproduction
 N = 8;                        %Synthesis SH order
 c=343;                      %speed of sound
-refCoef=0.6;               %reflecation coeff
+refCoef=0.8;               %reflecation coeff
 roomDims=[8,6,4];           % room dimensions
 r_0 = 0.0875;               %8.75cm head radius
 recPos=[4,3,1.7];           % Mic position (head center)
-%srcPos = [6.2,4.7,1.7];     %source position
-srcPos = [6,3,1.7];     %source position
-rot_ang = [0,0,30*(pi/180)]; %[alpha,beta,gamma]
+srcPos = [6,2,1.7];     %source position
+rot_ang = [0,0,0*(pi/180)]; %[alpha,beta,gamma]
 
 %Plot room and recording geometry
 %=================================================
@@ -26,7 +25,7 @@ drawnow()
 
 %Load dry signal
 %----------------------------------
-filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/Dry_signals/casta.wav";
+filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/Dry_signals/female_speech.wav";
 [s,fs] = audioread(filename);   %fs is the sample rate of the .wav file
 fs_sim = 196e3;                 %the image methoud sample rate
 
@@ -80,7 +79,7 @@ q = double(fs_sim / gComDiv);
 %capture anm head center pre rotation N reference
 %------------------------------------------------
 disp('Capture anm head center...')
-[anmt_c_ref,~, ~] = get_anm(fs_sim, N_ref, roomDims, refCoef, srcPos, recPos, p,q);     %SH X freq and SH X time
+[anmt_c_ref,~, poo] = get_anm(fs_sim, N_ref, roomDims, refCoef, srcPos, recPos, p,q);     %SH X freq and SH X time
 
 %capture anm Left ear
 %---------------------------------------
@@ -240,7 +239,9 @@ function [anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref
     %Rotate anm's
     %---------------------------------------
     [a_grid,th_grid,ph_grid] = equiangle_sampling(N+3);
-    Y=sh2(N,th_grid,ph_grid);
+    %Y = sh2(N,th_grid,ph_grid);
+    Y = shmat(N,[th_grid.',ph_grid.'],true,true); % spherical harmonics matrix
+
     Yp=diag(a_grid)*Y';
 
     anm_l_k_A       = anm_rotation(anmk_l,LeftEar,LeftEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
