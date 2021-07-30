@@ -18,11 +18,12 @@ classdef BilateralProccesor < BaseProcess
             obj.args('N_bilat')= 4;
             obj.args('head_radius')= 0.0875;
             obj.args('HRTFpath') = 'ToolboxApp/data/earoHRIR_KU100_Measured_2702Lebedev.mat';
-            obj.args('rot_ang') = 30;
+            obj.args('rot_ang') = 360 - 30;
             obj.args('headRotation')=true;
         end
         
-        function [s,fs]= process(obj,s, fs,roomDim,sourcePos,head_center_Pos,head_radius,refCoef)
+        function [s_blt,fs_blt]= process(obj,s, fs,roomDim,sourcePos,head_center_Pos,R)
+
             % Process and return the signal.
             % use the global room parameters and the processor agruments to
             % process the signal. you can either use an external function
@@ -34,7 +35,7 @@ classdef BilateralProccesor < BaseProcess
             ph_0_l = (pi/180)*(90);                             %left ear position
             th_0_r = (pi/180)*(90);                             %right ear position
             ph_0_r = (pi/180)*(270);                            %right ear position
-            head_vec = [head_radius,th_0_l,ph_0_l,th_0_r,ph_0_r];
+            head_vec = [obj.args('head_radius'),th_0_l,ph_0_l,th_0_r,ph_0_r];
 
             [x0,y0,z0]=s2c(head_vec(2),head_vec(3),head_vec(1));
             recPosL = [x0,y0,z0] + head_center_Pos;
@@ -42,16 +43,18 @@ classdef BilateralProccesor < BaseProcess
             recPosR = [x0,y0,z0] + head_center_Pos;
 
             
-            [anm_t_L,fs] = calc_room_anm_t(s, fs,roomDim,sourcePos,recPosL,...
-                refCoef,obj.args('N_bilat'));
-            [anm_t_R,fs] = calc_room_anm_t(s, fs,roomDim,sourcePos,recPosR,...
-                refCoef,obj.args('N_bilat'));
+            disp('geting the left/right anmt...')
+            tic
+            [anm_t_L,fs_blt] = calc_room_anm_t(s, fs,roomDim,sourcePos,recPosL,...
+                R,obj.args('N_bilat'));
+            [anm_t_R,fs_blt] = calc_room_anm_t(s, fs,roomDim,sourcePos,recPosR,...
+                R,obj.args('N_bilat'));
+            toc
             
-            %[s,fs] = pwd_binaural_reproduction(anm_t,fs,obj.args("N_array"),...
-            %    obj.args("r_array"),obj.args('HRTFpath'),obj.args('ShOrder'),...
-            %    obj.args('headRotation'),360-obj.args('rot_idx'));
-            
-            [s,fs] = Bilateral_Ambisonics_binaural_reproduction(anm_t_L, anm_t_R, fs, obj.args('N_bilat'), head_vec, HRTFpath,rot_ang);
+            rot_ang_rad = (360 - obj.args('rot_ang'))*(pi/180);
+            [s_blt,fs_blt] = Bilateral_Ambisonics_binaural_reproduction...
+                (anm_t_L, anm_t_R, fs_blt, obj.args('N_bilat'), head_vec,...
+                obj.args('HRTFpath'),rot_ang_rad,obj.args('headRotation'));
         end
     end
 end
