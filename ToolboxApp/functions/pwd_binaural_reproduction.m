@@ -1,4 +1,3 @@
-%% This script is an example for ACLtoolbox 
 % This script is an example for ACLtoolbox 
 % 1. Simulate room (shoebox) using the image method in the SH domain
 % 2. Generate array recordings
@@ -24,7 +23,6 @@ startup_script();
 % if colnum>1
 %     s=sum(s,2);
 % end
-%% ================= IMPORTANT!!! add path to HRTF and WignerD database from GoogleDrive ACLToolbox(in hobj format)
 % ================= IMPORTANT!!! add path to HRTF and WignerD database from GoogleDrive ACLToolbox(in hobj format)
 % HRTFpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';  
 % WignerDpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
@@ -32,12 +30,10 @@ startup_script();
 % HRTFpath = 'ToolboxApp/data/earoHRIR_KU100_Measured_2702Lebedev.mat';  
 WignerDpath = 'ToolboxApp/data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
 
-%% ================= parameters/flags - general
 % ================= parameters/flags - general
 c = soundspeed();               % speed of sound [m/s]
 DisplayProgress = false;         % true: display progress on command window
 
-%% ================= parameters/flags - spherical array
 % ================= parameters/flags - spherical array
 % N_array = 4;                    % SH order of array
 % r_array = 0.042;                % array radius. 0.042 is similar to EM32 array
@@ -46,19 +42,16 @@ sphereType = "rigid";            % "open" / "rigid"
 %================= generate spherical coordinates of spherical array   
 [th_array, ph_array, weights_array] = sampling_schemes.t_design(N_array);                
 
-%% ================= parameters/flags - source
 % ================= parameters/flags - source
 % N_PW = 15;                                      % SH order of plane-wave synthesis
 % sig_path = "+examples/data/female_speech.wav";  % location of .wav file - signal
 
-%% ================= parameters/flags - room
 % ================= parameters/flags - room
 % roomDim =       [15.5 9.8 7.5];     % Room Dimensions (L,W,H) [m]
 % sourcePos  =    [8.25 7.8 1.7];     % Source position (x,y,z) [m]
 % arrayPos   =    [5 5 1.7];          % Receiver position (x,y,z) [m]
 % R = 0.9;                            % walls refelection coeff
 
-%% ================= parameters/flags - binaural reproduction
 % ================= parameters/flags - binaural reproduction
 anm_to_reproduce = "sim";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
 if strcmp(anm_to_reproduce, "sim")
@@ -70,7 +63,6 @@ else
 end
 % headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
-%% generate RIR and convolve with speech
 % generate RIR and convolve with speech
 % [s, fs] = audioread(sig_path);
 
@@ -104,10 +96,8 @@ if DisplayProgress
     disp(['anm_t is of size (samples, (N_PW + 1)^2) = (' num2str(size(anm_t, 1),'%d') ', ' num2str(size(anm_t, 2),'%d') ')']);
 end
 
-%% Simulate array measurements and PWD if anm_to_reproduce='est'
 % Simulate array measurements and PWD if anm_to_reproduce='est'
 if strcmp(anm_to_reproduce, "est")
-    %% ================= Calculate array measurements  
     % ================= Calculate array measurements  
     p_array_t = anm2p(anm_t(:, 1:(N_array + 1)^2), fs, r_array, [th_array, ph_array], sphereType);
     % trim zeros at the end of anm_est_t
@@ -122,7 +112,6 @@ if strcmp(anm_to_reproduce, "est")
     end
 
 
-    %% ================= Plane wave decomposition
     % ================= Plane wave decomposition
     snr_db = 40;
     anm_est_t = p2anm(p_array_t, fs, [th_array, ph_array], r_array, sphereType, snr_db, N_array);
@@ -137,7 +126,6 @@ if strcmp(anm_to_reproduce, "est")
     clear anm_est_t
 end
 
-%% ================= Generate binaural signals - Ambisonics format
 % ================= Generate binaural signals - Ambisonics format
 if DisplayProgress
     fprintf('\n');
@@ -180,6 +168,7 @@ end
 %[bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath); % this function
 %makes all possible rotations -> good for head-tracking with device
 
+[bin_sig_rot_t, ~] = BinSigGen_HeadRotation_1RotIdx_ACL(hobj, anm_BR(1:(N_array+1)^2, :), N_array, headRotation, WignerDpath, rot_idx); %O.B changed N_BR to N_array to reproduce in the array order
 clear anm_BR
 % *** NOTE: it is much more efficient to use RIR-anm instead of signals containing
 % anm, but this is an example for binaural reproduction from estimated anm.
@@ -189,7 +178,6 @@ if DisplayProgress
     fprintf('Finished generating binaural signals\n');
 end
 
-%% Transform binaural signal to time domain and listen
 % Transform binaural signal to time domain and listen
 bin_sig_t = bin_sig_rot_t;
 clear bin_sig_rot_t

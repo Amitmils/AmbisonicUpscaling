@@ -15,7 +15,6 @@ end
 
 % [3] Rafaely, Boaz, and Amir Avni. "Interaural cross correlation in a sound field represented by spherical harmonics." The Journal of the Acoustical Society of America 127.2 (2010): 823-828.
 
-hobj = HRTF_phaseCorrection(hobj, 0); %Zamir's ear-alignd HRTF function
 
 % SH transform
 if strcmp(hobj.dataDomain{2},'SPACE')

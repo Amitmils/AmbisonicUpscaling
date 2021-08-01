@@ -17,7 +17,7 @@
 % Modified:         Aug 1 2021
 
 
-function [bin_sig_t, fs] = Binuaural_reproduction_bilateral_ambisonics(anm_l_f,anm_r_f, fs,HRTFpath,N_PW)
+function [bin_sig_t, fs] = Binuaural_reproduction_bilateral_ambisonics(anm_l_f,anm_r_f, fs,HRTFpath,N_PW,bilat)
 
 N_BR = N_PW;                % SH order of Ambisonics signal
 
@@ -43,8 +43,9 @@ if hobj.fs ~= fs
     hobj.data = cat(3, hrir_l, hrir_r);     
     hobj.fs = fs;        
 end
-
-
+if bilat
+    hobj = HRTF_phaseCorrection(hobj, 0); %Zamir's ear-alignd HRTF function
+end
 
 [bin_sig_rot_t] = Bilateral_BinSigGen_HeadRotation_1RotIdx_ACL(hobj, anm_l_BR,anm_r_BR, N_BR);
 clear anm_l_BR anm_r_BR

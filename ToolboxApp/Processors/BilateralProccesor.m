@@ -108,7 +108,7 @@ classdef BilateralProccesor < BaseProcess
             disp('Calc p(t) from HRTF and anm(k)...')
             tic
             [s_blt,fs_blt] = Binuaural_reproduction_bilateral_ambisonics...
-                (anm_l_k_A,anm_r_k_A, fs_blt,obj.args('HRTFpath'),obj.args('N_bilat'));
+                (anm_l_k_A,anm_r_k_A, fs_blt,obj.args('HRTFpath'),obj.args('N_bilat'),true);
             
             s_blt(size(anm_t_L, 1) + 1:end,:) = []; %cut the tail
 
