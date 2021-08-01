@@ -4,18 +4,27 @@ clear
 %addpath(genpath('/Users/orberebi/Documents/AClab/ACLtoolbox'));
 %addpath(genpath('/Users/orberebi/Documents/GitHub/PHALCOR/toolbox/'));
 
+save_path = "/Users/orberebi/Desktop/exp_01/";
+mkdir(save_path)
 %
 %Simulation Parameters
 %----------------------
-N_ref = 4;                  %high order standart reproduction
-N = 4;                        %Synthesis SH order
+N_ref = 42;                  %high order standart reproduction
+N = 2;                        %Synthesis SH order
 c=343;                      %speed of sound
-refCoef=0.9;               %reflecation coeff
+refCoef=0.93;               %reflecation coeff
 roomDims=[8,6,4];           % room dimensions
 r_0 = 0.0875;               %8.75cm head radius
-recPos=[4,3,1.7];           % Mic position (head center)
+recPos=[4,2,1.7];           % Mic position (head center)
 srcPos = [6,2,1.7];     %source position
-rot_ang = [0,0,15*(pi/180)]; %[alpha,beta,gamma]
+rot_ang = [0,0,60*(pi/180)]; %[alpha,beta,gamma]
+
+rot_ang_deg = rot_ang*(180/pi);
+%file names
+%========================
+bilateral_name = save_path + "/blt_N"+num2str(N)+"_"+num2str(rot_ang_deg(3))+".wav";
+bilateral_band_name = save_path + "/blt_bnd_N"+num2str(N)+"_"+num2str(rot_ang_deg(3))+".wav";
+ambisonics_name = save_path + "/amb_N"+num2str(N_ref)+"_"+num2str(rot_ang_deg(3))+".wav";
 
 %Plot room and recording geometry
 %=================================================
@@ -25,18 +34,31 @@ drawnow()
 
 %Load dry signal
 %----------------------------------
-filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/Dry_signals/female_speech.wav";
+%filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/Dry_signals/female_speech.wav";
+filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/Dry_signals/casta.wav";
 [s,fs] = audioread(filename);   %fs is the sample rate of the .wav file
 fs_sim = 48e3;                 %the image methoud sample rate
 
-filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat";
+%filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat";
+filename = "/Users/orberebi/Documents/GitHub/general/+Bilateral_Ambisonics/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat";
+
+
 hrtf = load(filename);
-[Pt_full_sig,Pt_earAligned_sig] =  bilateral_room_sim_func_v2(N_ref, N,...
+%if KEMAR transpose source grid
+hrtf.hobj.sourceGrid.azimuth = hrtf.hobj.sourceGrid.azimuth.';
+hrtf.hobj.sourceGrid.elevation = hrtf.hobj.sourceGrid.elevation.';
+hrtf.hobj.sourceGrid.r = hrtf.hobj.sourceGrid.r.';
+
+[Pt_full_sig,Pt_earAligned_sig,Pt_earAligned_sig_LPF,roomParams] =  bilateral_room_sim_func_v2(N_ref, N,...
     c,refCoef, roomDims, r_0, recPos, srcPos,s,fs,fs_sim,hrtf.hobj,rot_ang);
 
 
-%[Pt_full_sig,Pt_earAligned_sig] =  bilateral_room_sim_func(N_ref, N,...
-%    c,refCoef, roomDims, r_0, recPos, srcPos,s,fs,fs_sim,hrtf.hobj,rot_ang);
+audiowrite(bilateral_name,Pt_earAligned_sig,fs);
+audiowrite(bilateral_band_name,Pt_earAligned_sig_LPF,fs);
+audiowrite(ambisonics_name,Pt_full_sig,fs);
+
+
+
 
 % sound(Pt_full_sig,fs)
 % sound(Pt_earAligned_sig,fs)
@@ -198,7 +220,7 @@ Pt_earAligned_sig =[Pt_earAligned_left,Pt_earAligned_right];
 disp('Done')
 end
 
-function [Pt_full_sig,Pt_earAligned_sig] =  bilateral_room_sim_func_v2(N_ref, N, c,refCoef, roomDims, r_0, recPos, srcPos,s,fs,fs_sim,hobj,rot_ang)
+function [Pt_full_sig,Pt_earAligned_sig,Pt_earAligned_sig_LPF,roomParams] =  bilateral_room_sim_func_v2(N_ref, N, c,refCoef, roomDims, r_0, recPos, srcPos,s,fs,fs_sim,hobj,rot_ang)
 
 %set freqiemcy vectors
 %------------------------------------------
@@ -229,37 +251,48 @@ if hobj.fs~=fs
 end
 hobj.micGrid.r = r_0;
 
-gComDiv = gcd(fs_sim, fs);
-p = double(fs / gComDiv);
-q = double(fs_sim / gComDiv);
+% gComDiv = gcd(fs_sim, fs);
+% p = double(fs / gComDiv);
+% q = double(fs_sim / gComDiv);
 
 %capture anm head center pre rotation N reference
 %------------------------------------------------
 disp('Capture anm head center...')
 %[anmt_c_ref,fs] = calc_room_anm_t(s, fs,roomDims,srcPos,recPos,refCoef,N_ref);
-[anmt_c_ref,~, poo] = get_anm(fs, N_ref, roomDims, refCoef, srcPos, recPos, p,q);     %SH X freq and SH X time
+%[anmt_c_ref,~, poo] = get_anm(fs, N_ref, roomDims, refCoef, srcPos, recPos, p,q);     %SH X freq and SH X time
+[anmt_c_ref, parametric, roomParams] = image_method.calc_rir(fs, roomDims, srcPos, recPos, refCoef,...
+    {}, {"array_type", "anm", "N", N_ref});
 
 %capture anm Left ear
 %---------------------------------------
 disp('Capture anm Left ear...')
-[anmt_l,~, ~] = get_anm(fs_sim, N, roomDims, refCoef, srcPos, recPosL, p,q);     %SH X freq and SH X time
+%[anmt_l,~, ~] = get_anm(fs_sim, N, roomDims, refCoef, srcPos, recPosL, p,q);     %SH X freq and SH X time
+[anmt_l, ~] = image_method.calc_rir(fs, roomDims, srcPos, recPosL, refCoef,...
+    {}, {"array_type", "anm", "N", N});
+
 %capture anm Right ear
 %---------------------------------------
 disp('Capture anm Right ear...')
-[anmt_r,~, ~] = get_anm(fs_sim, N, roomDims, refCoef, srcPos, recPosR, p,q);     %SH X freq and SH X time
-   
+%[anmt_r,~, ~] = get_anm(fs_sim, N, roomDims, refCoef, srcPos, recPosR, p,q);     %SH X freq and SH X time
+[anmt_r, ~] = image_method.calc_rir(fs, roomDims, srcPos, recPosR, refCoef,...
+    {}, {"array_type", "anm", "N", N});  
 
 disp('Rotate anms...')
 % Transform from time to frequency domain
 %make length of x even, and calculate frequency range
-anmt_c_ref  = anmt_c_ref.';
-anmt_r      = anmt_r.';
-anmt_l      = anmt_l.';
-nfft = max([size(anmt_l,1) size(anmt_r,1) size(anmt_c_ref,2)]);
-if mod(nfft,2)
-    nfft = nfft+1;
-end
+% anmt_c_ref  = anmt_c_ref.';
+% anmt_r      = anmt_r.';
+% anmt_l      = anmt_l.';
+% nfft = max([size(anmt_l,1) size(anmt_r,1) size(anmt_c_ref,2)]);
+% if mod(nfft,2)
+%     nfft = nfft+1;
+% end
+% fftDim = 1;
+
+nfft = max([size(anmt_l,1) size(anmt_r,1) size(anmt_c_ref,1)]);
+nfft = 2^nextpow2(nfft);
 fftDim = 1;
+
 
 anmk_l = fft(anmt_l,nfft,fftDim);
 anmk_l = anmk_l.';          %SH X freq
@@ -278,8 +311,8 @@ w=2*pi*f;                       % radial frequency
 k=w/c;                          %wave number
 kr=k*head_vec(1);               %k*head_radius
 
-[anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref,...
-    rot_ang,N,N_ref,head_vec,kr);
+[anm_l_k_A,anm_r_k_A,anmk_c_ref,anm_l_k_A_LPF,anm_r_k_A_LPF] = rotate_anms(anmk_l,anmk_r,anmk_c_ref,...
+    rot_ang,N,N_ref,head_vec,kr,fs);
 
          
 
@@ -336,10 +369,18 @@ anm_tilde_r = anm_r_k_A(:,1:size(H_l_nm_pc,1)).'*tild_N_ear_mat;
 pl_SH_earAligned = sum(padarray(anm_tilde_l,[0 pad_ear-size(anm_tilde_l,2)],'post').*padarray(H_l_nm_pc,[0 pad_ear-size(H_l_nm_pc,2)],'post'),2).';
 pr_SH_earAligned = sum(padarray(anm_tilde_r,[0 pad_ear-size(anm_tilde_r,2)],'post').*padarray(H_r_nm_pc,[0 pad_ear-size(H_r_nm_pc,2)],'post'),2).';
 
+
+anm_tilde_l = anm_l_k_A_LPF(:,1:size(H_l_nm_pc,1)).'*tild_N_ear_mat;
+anm_tilde_r = anm_r_k_A_LPF(:,1:size(H_l_nm_pc,1)).'*tild_N_ear_mat;
+pl_SH_earAligned_LPF = sum(padarray(anm_tilde_l,[0 pad_ear-size(anm_tilde_l,2)],'post').*padarray(H_l_nm_pc,[0 pad_ear-size(H_l_nm_pc,2)],'post'),2).';
+pr_SH_earAligned_LPF = sum(padarray(anm_tilde_r,[0 pad_ear-size(anm_tilde_r,2)],'post').*padarray(H_r_nm_pc,[0 pad_ear-size(H_r_nm_pc,2)],'post'),2).';
+
+
 % Calculate presure BRIR's
 disp('Calculating BRIR P(t)...')
 Pt_full         = calc_pt(pl_SH_full.',pr_SH_full.');
 Pt_earAligned   = calc_pt(pl_SH_earAligned.',pr_SH_earAligned.');
+Pt_earAligned_LPF   = calc_pt(pl_SH_earAligned_LPF.',pr_SH_earAligned_LPF.');
 
 % Convolve dry signal with the the room impulse responcess
 disp('Calculating P(t)...')
@@ -349,7 +390,11 @@ Pt_full_sig =[Pt_full_left,Pt_full_right];
 
 Pt_earAligned_left = BRIR2pt(Pt_earAligned(:,1),s);
 Pt_earAligned_right = BRIR2pt(Pt_earAligned(:,2),s);
+Pt_earAligned_left_LPF = BRIR2pt(Pt_earAligned(:,1),s);
+Pt_earAligned_right_LPF = BRIR2pt(Pt_earAligned(:,2),s);
+
 Pt_earAligned_sig =[Pt_earAligned_left,Pt_earAligned_right];
+Pt_earAligned_sig_LPF =[Pt_earAligned_left_LPF,Pt_earAligned_right_LPF];
 
 disp('Done')
 end
@@ -359,7 +404,7 @@ end
 
 %Functions
 %--------------------------------
-function [anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref,rot_ang,N,N_ref,head_vec,kr)
+function [anm_l_k_A,anm_r_k_A,anmk_c_ref,anm_l_k_A_LP,anm_r_k_A_LP] = rotate_anms(anmk_l,anmk_r,anmk_c_ref,rot_ang,N,N_ref,head_vec,kr,fs)
     % make Wigner D
     % -------------------------------
     D       = WignerDM(N,-rot_ang(1),-rot_ang(2),-rot_ang(3));
@@ -376,19 +421,6 @@ function [anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref
     inc = abs(RightEar) > 1e-10;
     RightEar = RightEar.*inc;
 
-    head_vec_rotated = head_vec;
-    head_vec_rotated(3) = head_vec_rotated(3) + rot_ang(3);
-    head_vec_rotated(5) = head_vec_rotated(5) + rot_ang(3);
-
-    [x0,y0,z0]  = s2c(head_vec_rotated(2),head_vec_rotated(3),head_vec_rotated(1)); %left ear vector in cartesians
-    LeftEar_r     = [x0,y0,z0];
-    inc = abs(LeftEar_r) > 1e-10;
-    LeftEar_r = LeftEar_r.*inc;
-
-    [x0,y0,z0]  = s2c(head_vec_rotated(4),head_vec_rotated(5),head_vec_rotated(1)); %right ear vector in cartesians
-    RightEar_r    = [x0,y0,z0];
-    inc = abs(RightEar_r) > 1e-10;
-    RightEar_r = RightEar_r.*inc;
 
     M = getRotationMat_ZYZ(-rot_ang(1),-rot_ang(2),-rot_ang(3));
     LeftEar_r_M = (M*LeftEar.').';
@@ -398,16 +430,19 @@ function [anm_l_k_A,anm_r_k_A,anmk_c_ref] = rotate_anms(anmk_l,anmk_r,anmk_c_ref
     %Rotate anm's
     %---------------------------------------
     [a_grid,th_grid,ph_grid] = equiangle_sampling(N+3);
-    %Y = sh2(N,th_grid,ph_grid);
     Y = shmat(N,[th_grid.',ph_grid.'],true,true); % spherical harmonics matrix
 
     Yp=diag(a_grid)*Y';
 
     anm_l_k_A       = anm_rotation(anmk_l,LeftEar,LeftEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
     anm_r_k_A       = anm_rotation(anmk_r,RightEar,RightEar_r_M,D,Y,Yp,th_grid,ph_grid,kr);
+    anm_l_k_A_LP    = anm_rotation_LPF(anmk_l,LeftEar,LeftEar_r_M,D,Y,Yp,th_grid,ph_grid,kr,fs);
+    anm_r_k_A_LP    = anm_rotation_LPF(anmk_r,RightEar,RightEar_r_M,D,Y,Yp,th_grid,ph_grid,kr,fs);
     anmk_c_ref      = D_ref*anmk_c_ref;    %left ear post rotation true mesurments
 
 end
+
+
 function Pt = calc_pt(Pl,Pr)
     Pl(1)=real(Pl(1));                   Pr(1)=real(Pr(1));
     Pl(end)=real(Pl(end));               Pr(end)=real(Pr(end));
@@ -477,6 +512,52 @@ function anm_k_D_c = anm_rotation(anm_k,micPos,micPos_r,D,Y,Yp,th_grid,ph_grid,k
 
 
 end
+function anm_k_D_c = anm_rotation_LPF(anm_k,micPos,micPos_r,D,Y,Yp,th_grid,ph_grid,kr,Fs)
+
+
+    nfft = 2*(size(anm_k,2) - 1);
+
+    anm_k_D = D*anm_k;              %SH/Freq (wigner D)
+    a_k_D = Y.'*anm_k_D;            %Space/Freq
+
+    e_mat     = build_e_mat_positive(micPos,micPos_r,th_grid,ph_grid,kr);
+
+    a_k_D_c   = a_k_D.*e_mat;         %Space/Freq (phase correction)
+
+    
+    %mix translation and rotation
+    %-------------------------------------
+    width = 3e3; %the fadout filter width
+    Fc = 3e3; %cutoff freq
+    n=double(linspace(0,Fs/2,nfft/2+1)); % frequency range
+    
+    [~,ind1] = min(abs(n - Fc));
+    [~,ind2] = min(abs(n - (Fc+width)));
+    
+
+    filter_out              = zeros(size(n));
+    filter_out(1:ind1)      = 1;
+    filter_out(ind1:ind2-1) = linspace(1,0,(ind2-ind1));
+    filter_in               = ones(size(n));
+    filter_in               = filter_in - filter_out;
+    filter_out              = repmat(filter_out,[size(a_k_D_c,1),1]);
+    filter_in               = repmat(filter_in,[size(a_k_D_c,1),1]);
+
+    a_k_D_c(:,1:size(filter_out,2)) = a_k_D_c(:,1:size(filter_out,2)).*filter_out;  %fade out the translation
+    a_k_D(:,1:size(filter_out,2))   = a_k_D(:,1:size(filter_out,2)).*filter_in;       % fade in the rotation
+    
+    a_k_LPF     = a_k_D_c(:,1:size(filter_out,2))+a_k_D(:,1:size(filter_out,2));        %mix both
+    a_k_LPF     = a_k_LPF.';
+    a_k_LPF     = [a_k_LPF;flipud(conj(a_k_LPF(2:end-1,:)))].';                         %calc negative freq
+    anm_k_D_c   = (a_k_LPF.'*Yp).';   %SH/Freq
+
+    
+%     a_k_D_spectra = (a_k_LPF.'*Yp).';
+%     SH_spectra_v5(a_k_D_spectra,Fs,0.008,new_N)
+%     e_mat_spectra = (e_mat.'*Yp).';
+
+
+end
 function e_mat = build_e_mat_positive(micPos,micPos_r,th_grid,ph_grid,kr)
     th_s = th_grid;
     ph_s = ph_grid;
@@ -501,43 +582,4 @@ function plot_room(recPos,srcPos_des,roomDims)
 ph0=mod(ph0,2*pi);
 srcPos_relative=[r0,th0,ph0];
 roomSimulationPlot_ISF(roomDims, srcPos_relative, recPos) %from ACLtoolbox
-end
-
-function [anm_t,max_fs] = calc_room_anm_t(s, fs,roomDim,sourcePos,arrayPos,R,N_PW)
-%CALC_ROOM_ANM_T Summary of this function goes here
-%   Detailed explanation goes here
-max_length =0;
-max_fs = 0 ;
-for k=1:length(s)
-    
-    if max_fs<fs{k}
-        max_fs = fs{k};
-    end
-end
-for k=1:length(s)
-
-[~,colnum]=size(s{k});
-    if colnum>1
-        s{k}=sum(s{k},2);
-    end
-    s{k} = resample(s{k},max_fs,fs{k});
-    if length(s{k})>max_length
-        max_length = length(s{k});
-    end
-end
-%anm_t = zeros(max_length,256);
-anm_t = zeros(max_length,(N_PW+1)^2);
-for k=1:length(s)
-
-[hnm, ~] = image_method.calc_rir(max_fs, roomDim, sourcePos{k}, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});
-% T60 = RoomParams.T60(hnm(:,1), fs); 
-% CriticalDist = RoomParams.critical_distance_diffuse(roomDim, R);
-
-% figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
-% xlabel('Time [sec]');
-anm_t(1:length(s{k}),:) = anm_t(1:length(s{k}),:) +  fftfilt(hnm, s{k});
-
-% anm_t = hnm; 
-clear hnm
-end
 end
