@@ -20,7 +20,7 @@ for k=1:length(s)
         max_length = length(s{k});
     end
 end
-anm_t = zeros(max_length,256);
+anm_t = zeros(max_length,(N_PW+1)^2); %changed from 265 (this was a mistake) O.B
 for k=1:length(s)
 
 [hnm, ~] = image_method.calc_rir(max_fs, roomDim, sourcePos{k}, arrayPos, R, {}, {"array_type", "anm", "N", N_PW});

@@ -6,10 +6,17 @@ A matlab app for various signal processing algorithms.
 * Clone this repository using github desktop or run this command:
 `git clone https://github.com/ACLab-BGU/general.git`
 
-* open the folder using matlab
-* open the ToolboxApp/toolbox.mlapp and press run
-* you can choose which algorithm to use including chaining them using `ctrl+click` by order.
-![image](https://user-images.githubusercontent.com/13310488/111607613-1682e300-87e1-11eb-952b-2c86b476bd92.png)
+* Open the folder using matlab
+* Open the ToolboxApp/toolbox.mlapp and press run
+* Add source(s)
+* Set your desired room parameters along with array and source(s) locations.
+ ![image](https://user-images.githubusercontent.com/13310488/126484398-f35f6fcc-ca5e-4f3f-818e-37e9b26c6951.png)
+
+* Select algorithm and parameters.
+* ![image](https://user-images.githubusercontent.com/13310488/126484510-ca0e0910-6ae3-454f-a253-3aebf6029a4d.png)
+
+* Proccess the signal and listen to the results
+
 
 
 
