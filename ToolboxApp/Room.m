@@ -25,8 +25,8 @@ classdef Room
                 fclose(fid); 
                 decoded = jsondecode(str);
                 
-                obj.RoomSize = decoded.RoomSize;
-                obj.ArrayPosition = decoded.ArrayPosition;
+                obj.RoomSize = decoded.RoomSize';
+                obj.ArrayPosition = decoded.ArrayPosition';
                 
                 obj.Reflections = decoded.Reflections;
                 
