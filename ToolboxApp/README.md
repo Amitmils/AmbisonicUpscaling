@@ -10,7 +10,7 @@ A matlab app for various signal processing algorithms.
 * Open the ToolboxApp/toolbox.mlapp and press run
 * Add source(s)
 * Set your desired room parameters along with array and source(s) locations.
- ![image](https://user-images.githubusercontent.com/13310488/126484398-f35f6fcc-ca5e-4f3f-818e-37e9b26c6951.png)
+ ![image](https://user-images.githubusercontent.com/13310488/131481214-e41b58b4-f104-4a8f-8ac2-12aa2fe622c6.png)
 
 * Select algorithm and parameters.
 * ![image](https://user-images.githubusercontent.com/13310488/126484510-ca0e0910-6ae3-454f-a253-3aebf6029a4d.png)
