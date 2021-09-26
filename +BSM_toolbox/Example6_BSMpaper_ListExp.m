@@ -71,10 +71,10 @@ filt_samp    = filt_len * desired_fs;
 freqs_sig    = ( 0 : (filt_samp / 2) ) * desired_fs / filt_samp;
 freqs_sig(1) = 1/4 * freqs_sig(2); %to not divide by zero
 % room
-roomDim = [5 6 3];
-sourcePos = [4 3.5 1.7];
+roomDim = [10 6 3];
+sourcePos = [4 3.5 1.7] + [1 1 0];
 arrayPos = [2 2 1.7];
-R = 0.96; % walls refelection coeff
+R = 0.95; % walls refelection coeff
 [hnm, parametric_rir] = image_method.calc_rir(desired_fs, roomDim, sourcePos, arrayPos, R, {}, {'array_type', 'anm', 'N', N_PW});
 T60 = RoomParams.T60(hnm(:,1), desired_fs);
 fprintf('T60 = %.2f sec\n', T60);
