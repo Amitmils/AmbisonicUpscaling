@@ -32,9 +32,9 @@ N_PW = 30;                                             % SH order of plane-wave 
 save_plot_flag = false;                                     % save MATLAB files before time interpolation?
 
 % parameters/flags - BSM design
-inv_opt = 1;                                           % opt=1 -> ( (1 / lambda) * (A * A') + eye )  |||| opt2=1 -> ((A * A') + lambda * eye);
+inv_opt = 1;                                           % opt=1: ( (1 / lambda) * (A * A') + eye ) | opt=2: ((A * A') + lambda * eye);
 source_distribution = 1;                               % 0 - nearly uniform (t-design), 1 - spiral nearly uniform
-Q = 240;                                               % Asuumed number of sources
+Q = 240;                                               % Assumed number of sources
 
 magLS = false;                                          % true - magLS, false - complex LS
 f_cut_magLS = 1500;                                    % above cutoff frequency use MagLS
