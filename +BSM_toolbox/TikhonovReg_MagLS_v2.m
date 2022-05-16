@@ -93,3 +93,4 @@ end
 err =  norm(A' * x - (abs(b) .* zi), 2)^2 + lambda * norm(x, 2)^2; 
 
 end
+

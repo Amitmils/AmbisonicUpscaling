@@ -21,12 +21,12 @@ rng('default');
 %% ================== simulation parameters
 % parameters/flags - array
 filt_len = 0.032;                                      % filters (BSM/HRTF) length [sec]
-arrayType = 1;                                         % 0 - spherical array, 1 - semi-circular array, 2 - full-circular array
+arrayType = 0;                                         % 0 - spherical array, 1 - semi-circular array, 2 - full-circular array
 rigidArray = 1;                                        % 0 - open array, 1 - rigid array
-M = 6;                                                 % number of microphones
-r_array = 0.1;                                         % array radius
-head_rot_az = ...
-    wrapTo2Pi(deg2rad([0]));                         % vector of head rotations [rad]
+M = 32;                                                 % number of microphones
+r_array = 0.042;                                         % array radius
+head_rot = ...
+    wrapTo2Pi(deg2rad([0, 0]));                       % head rotation - (theta, phi) [rad]
 normSV = true;                                         % true - normalize steering vectors
 
 % parameters/flags - general
@@ -78,7 +78,7 @@ BSMobj.max_iter_magLS = max_iter_magLS;
 BSMobj.normSV = normSV;
 BSMobj.SNR_lin = SNR_lin;
 BSMobj.inv_opt = BSM_inv_opt;
-BSMobj.head_rot_az = head_rot_az;
+BSMobj.head_rot = head_rot;
 BSMobj.M = M;
 BSMobj.Q = Q;
 BSMobj.source_distribution = source_distribution;
@@ -120,16 +120,13 @@ hobj_full = hobj_full.toFreq(filt_samp);
 hobj_full.data = hobj_full.data(:, 1:ceil(filt_samp/2)+1, :);
 
 % Rotate HRTFs
-WignerDpath = '/Volumes/GoogleDrive/My Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';
-load(WignerDpath);
 N_HRTF_rot = N_HRTF;
-DN = (N_HRTF_rot + 1)^2; % size of the wignerD matrix
-D_allAngles = D(:, 1 : DN);
-hobj_full_rot = RotateHRTF(hobj_full, N_HRTF_rot, D_allAngles, head_rot_az);
+hobj_full_rot = RotateHRTFwigner(hobj_full, N_HRTF_rot, head_rot);
 hobj_full_rot = hobj_full_rot.toSpace('SRC');
 
 %% ================= source and binaural signals estimation - known source directions
-%  ================= head rotation by HRTF rotation 
+%  ================= head rotation by HRTF rotation
+%{
 rng('default');
 T = 100; % snapshots
 experiments = 10;
@@ -210,7 +207,7 @@ semilogx(freqs_sig, mag2db(err_p), 'linewidth', 3);
 xlabel('Frequency [Hz]');
 ylabel('Error [dB]');
 title(['TR-BSM known directions, ', num2str(L), ' sources, $\phi_{rot}$=',...
-    num2str(rad2deg(head_rot_az)), '$^{\circ}$']);
+    num2str(rad2deg(head_rot)), '$^{\circ}$']);
 % legend({'$\epsilon_s$','$\epsilon_p^l$','$\epsilon_p^r$'});
 legend({'$\epsilon_p^l$','$\epsilon_p^r$'});
 if save_plot
@@ -223,7 +220,7 @@ if save_plot
     export_fig(['/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Research/',...
             'FB/Binaural_beamforming/Presentations/pres12/figs/',...
             'err_known_sources_semicircM=6_L=',num2str(L),...
-            '_rot=',num2str(rad2deg(head_rot_az)),'.png'],...
+            '_rot=',num2str(rad2deg(head_rot)),'.png'],...
             '-transparent', '-r300');
 end
 
@@ -237,7 +234,7 @@ semilogx(freqs_sig, var_p_hat(:, 2), '-+', 'color', '#D95319');
 xlabel('Frequency [Hz]');
 ylabel('Variance');
 title(['TR-BSM known directions, ', num2str(L), ' sources, $\phi_{rot}$=',...
-    num2str(rad2deg(head_rot_az)), '$^{\circ}$']);
+    num2str(rad2deg(head_rot)), '$^{\circ}$']);
 legend({'var[$p^l$]', 'var[$p^r$]', 'var[$\hat{p}^l$]', 'var[$\hat{p}^r$]'});
 if save_plot
 %     export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/',...
@@ -249,16 +246,17 @@ if save_plot
     export_fig(['/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Research/',...
             'FB/Binaural_beamforming/Presentations/pres12/figs/',...
             'var_known_sources_semicircM=6_L=',num2str(L),...
-            '_rot=',num2str(rad2deg(head_rot_az)),'.png'],...
+            '_rot=',num2str(rad2deg(head_rot)),'.png'],...
             '-transparent', '-r300');
 end
+%}
 
 %% ================= binaural signals estimation - using BSM directions
 %  ================= head rotation by HRTF rotation 
 rng('default');
 T = 100; % snapshots
 experiments = 10;
-L = 6;
+L = 7;
 add_noise = false;
 rotate_head = true;
 save_plot = false;
@@ -341,11 +339,11 @@ var_p_hat = squeeze(mean(var_p_hat, 1));
 figure;
 semilogx(freqs_sig, mag2db(err_p), 'linewidth', 3);
 hold on;
-% ylim([-30 1]);
+ylim([-30 1]);
 xlabel('Frequency [Hz]');
 ylabel('Error [dB]');
 title(['TR-BSM, ', num2str(L), ' sources, $\phi_{rot}$=',...
-    num2str(rad2deg(head_rot_az)), '$^{\circ}$']);
+    num2str(rad2deg(head_rot)), '$^{\circ}$']);
 legend({'$\epsilon_p^l$', '$\epsilon_p^r$'}, 'interpreter', 'latex');
 if save_plot
 %     export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/',...
@@ -357,12 +355,12 @@ if save_plot
     export_fig(['/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Research/',...
             'FB/Binaural_beamforming/Presentations/pres12/figs/',...
             'err_unknown_sources_semicircM=6_L=',num2str(L),...
-            '_rot=',num2str(rad2deg(head_rot_az)),'.png'],...
+            '_rot=',num2str(rad2deg(head_rot)),'.png'],...
             '-transparent', '-r300');
 end
 
 % var plot
-%
+%{
 figure;
 semilogx(freqs_sig, var_p(:, 1), 'color', '#0072BD');
 hold on;
@@ -372,7 +370,7 @@ semilogx(freqs_sig, var_p_hat(:, 2), '-+', 'color', '#D95319');
 xlabel('Frequency [Hz]');
 ylabel('Variance');
 title(['TR-BSM, ', num2str(L), ' sources, $\phi_{rot}$=',...
-    num2str(rad2deg(head_rot_az)), '$^{\circ}$']);
+    num2str(rad2deg(head_rot)), '$^{\circ}$']);
 legend({'var[$p^l$]', 'var[$p^r$]', 'var[$\hat{p}^l$]', 'var[$\hat{p}^r$]'});
 if save_plot
 %     export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/',...
@@ -384,7 +382,7 @@ if save_plot
     export_fig(['/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Research/',...
             'FB/Binaural_beamforming/Presentations/pres12/figs/',...
             'var_unknown_sources_semicircM=6_L=',num2str(L),...
-            '_rot=',num2str(rad2deg(head_rot_az)),'.png'],...
+            '_rot=',num2str(rad2deg(head_rot)),'.png'],...
             '-transparent', '-r300');
 end
 %}
@@ -400,7 +398,9 @@ rotate_head = true;
 save_plot = false;
 
 if rotate_head
-    V_BSM_rot = CalculateSteeringVectors(BSMobj, N_SV, th_BSMgrid_vec, wrapTo2Pi(ph_BSMgrid_vec + head_rot_az));
+    V_BSM_rot = CalculateSteeringVectors(BSMobj, N_SV, ...
+        wrapToPi(th_BSMgrid_vec - head_rot(:, 1)), ...
+        wrapTo2Pi(ph_BSMgrid_vec + head_rot(:, 2)));
     V_BSM_rot = permute(V_BSM_rot, [3 2 1]);
 end
 
@@ -479,7 +479,7 @@ if save_plot
     export_fig(['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/',...
         'Research/FB_BFBR/BSM/plots/numerical_errors/',...
         'unknown_sources_semicircM=6_L=',num2str(L),...
-        '_rot=',num2str(rad2deg(head_rot_az)),'_steering.png'],...
+        '_rot=',num2str(rad2deg(head_rot)),'_steering.png'],...
         '-transparent', '-r300');
 end
 
