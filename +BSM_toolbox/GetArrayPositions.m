@@ -38,9 +38,8 @@ function [th_array, ph_array, ph_rot_array] = GetArrayPositions(arrayType, n_mic
         th_array = deg2rad(90) * ones(size(ph_array));        
 
         % rotate array in azimuth
-        ph_rot_array = wrapTo2Pi(ph_array + array_rot_az); 
-
-    end 
+        ph_rot_array = wrapTo2Pi(ph_array + array_rot_az);            
+    end
 end
 
 
