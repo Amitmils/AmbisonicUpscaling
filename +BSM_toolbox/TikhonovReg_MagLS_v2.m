@@ -59,7 +59,7 @@ tol_inv = 1 + max(size(mat_to_inv))*eps(norm(mat_to_inv));  % the tolerance is t
 Sig = diag(Sig); 
 Sig(Sig <= tol_inv) = 0;
 Sig(Sig ~= 0) = 1 ./ Sig(Sig ~= 0);
-inv_mat = (U * diag(Sig) * V');
+inv_mat = (V * diag(Sig) * U');
 
 % first iteration -  Original Tikhonov regularization
 iter = 1;
@@ -93,3 +93,4 @@ end
 err =  norm(A' * x - (abs(b) .* zi), 2)^2 + lambda * norm(x, 2)^2; 
 
 end
+

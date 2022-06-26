@@ -16,6 +16,7 @@ function [c_BSM_l, c_BSM_r] = GenerateBSMfilters_faster(BSMobj, V_k, hobj_freq_g
     f_cut_magLS     = BSMobj.f_cut_magLS;
     tol_magLS       = BSMobj.tol_magLS;
     max_iter_magLS  = BSMobj.max_iter_magLS;    
+    magLS_cvx       = BSMobj.magLS_cvx;
     n_mic           = BSMobj.n_mic;                    
     normSV          = BSMobj.normSV;
     SNR_lin         = BSMobj.SNR_lin;
@@ -48,12 +49,20 @@ function [c_BSM_l, c_BSM_r] = GenerateBSMfilters_faster(BSMobj, V_k, hobj_freq_g
         else                
             % solution to Tikhonov regularization problem            
             if magLS && freqs_sig(f) >= f_cut_magLS                    
-                % ===== MAG LS                                    
-                [c_BSM_l(:, f), phase_last] = BSM_toolbox.TikhonovReg_MagLS_v2(V_k_curr, h_l, (1 / SNR_lin), phase_init_l_magLS, inv_opt, tol_magLS, max_iter_magLS);                                        
-                phase_init_l_magLS = phase_last;
-                [c_BSM_r(:, f), phase_last] = BSM_toolbox.TikhonovReg_MagLS_v2(V_k_curr, h_r, (1 / SNR_lin), phase_init_r_magLS, inv_opt, tol_magLS, max_iter_magLS);                                        
-                phase_init_r_magLS = phase_last;
-                % ==============
+                % ===== MAG LS     
+                if ~magLS_cvx
+                    % Variable exchange method
+                    [c_BSM_l(:, f), phase_last] = BSM_toolbox.TikhonovReg_MagLS_v2(V_k_curr, h_l, (1 / SNR_lin), phase_init_l_magLS, inv_opt, tol_magLS, max_iter_magLS);                                        
+                    phase_init_l_magLS = phase_last;
+                    [c_BSM_r(:, f), phase_last] = BSM_toolbox.TikhonovReg_MagLS_v2(V_k_curr, h_r, (1 / SNR_lin), phase_init_r_magLS, inv_opt, tol_magLS, max_iter_magLS);                                        
+                    phase_init_r_magLS = phase_last;
+                else
+                    % SDP with CVX toolbox
+                    c_BSM_l(:, f) = BSM_toolbox.TikhonovReg_MagLS_CVX(V_k_curr, h_l, (1 / SNR_lin), inv_opt);
+                    c_BSM_r(:, f) = BSM_toolbox.TikhonovReg_MagLS_CVX(V_k_curr, h_r, (1 / SNR_lin), inv_opt);
+                    % ==============
+                end
+
 
             else
                 % ===== CMPLX LS                    

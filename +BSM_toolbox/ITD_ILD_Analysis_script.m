@@ -18,6 +18,8 @@ rng('default');
 
 % add AKtoolbox to path (from old ACLtoolbox in shared GoogleDrive)
 addpath(genpath('/Users/liormadmoni/Google Drive/ACLtoolbox/Third_party/AKtools/'));
+% add export_fig to path
+addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302'));
 
 % parameters/flags - array
 filt_len = 0.032;                                      % filters (BSM/HRTF) length [sec]
@@ -26,15 +28,15 @@ rigidArray = 1;                                        % 0 - open array, 1 - rig
 M = 6;                                                 % number of microphones
 r_array = 0.1;                                         % array radius
 head_rot_az = ...
-    wrapTo2Pi(deg2rad([0]));                     % vector of head rotations [degrees]
+    wrapTo2Pi(deg2rad([0, 30, 60]));                     % vector of head rotations [degrees]
 normSV = true;                                         % true - normalize steering vectors
 
 % parameters/flags - general
 c = 343;                                               % speed of sound [m/s]
-desired_fs = 16000;                                    % choose samplong frequency in Hz
-N_PW = 14;                                             % SH order of plane-wave synthesis
+desired_fs = 48000;                                    % choose samplong frequency in Hz
+N_PW = 30;                                             % SH order of plane-wave synthesis
 saveFiles = false;                                     % save MATLAB files before time interpolation?
-save_plot_flag = false;                                % save plots locally
+save_plot_flag = true;                                % save plots locally
 
 % parameters/flags - BSM design
 inv_opt = 1;                                           % opt=1 -> ( (1 / lambda) * (A * A') + eye )  |||| opt2=1 -> ((A * A') + lambda * eye);
@@ -72,7 +74,7 @@ end
 COMPUTE_ITD = true;     % flag whether or not to compute ITD
 COMPUTE_ILD = true;    % flag whether or not to compute ILD
 % Incident plane-wave (to study ITD/ILD)
-ph_DOA_res = 5;         % Azimuth resolution in degrees
+ph_DOA_res = 1;         % Azimuth resolution in degrees
 ph_DOA_max = 360;       % maximal azimuth in degrees
 ph_DOA = deg2rad(0:ph_DOA_res:ph_DOA_max);
 th_DOA = deg2rad(90 * ones(size(ph_DOA)));
@@ -95,8 +97,8 @@ saveITDvid = false;
 % fig_for_ITD = figure('visible','off', 'Position', [1, 1, 1280, 800]);
 % ILD_flim = [1500 20e3]; ILD_freq_bands = 22;
 % ILD_flim = [50 20e3]; ILD_freq_bands = 39;
-% ILD_flim = [50 6000]; ILD_freq_bands = 21;
-ILD_flim = [50 6000]; ILD_freq_bands = 27;
+ILD_flim = [50 6000]; ILD_freq_bands = 21;
+% ILD_flim = [50 6000]; ILD_freq_bands = 27;
 ILD_fmax_ave = 6000;
 if saveITDvid
     mkdir(['plots/ITD_ILD_err/ITD_vid/']);
@@ -127,8 +129,8 @@ end
 %% ================= HRTFS preprocessing
 % load HRIRs
 N_HRTF = 30;
-% HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';
-HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat';
+HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';
+% HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat';
 load(HRTFpath);         % hobj is HRIR earo object
 hobj.shutUp = false;
 [th_BSMgrid_vec, ph_BSMgrid_vec] = BSM_toolbox.BSMgrid(source_distribution, Q);
@@ -564,7 +566,7 @@ if COMPUTE_ITD
         %M_leg_mag = strcat('$M=',M_leg_mag,'$ mag');
         %M_leg_all = [{'Ref'}; M_leg_cmplx; M_leg_mag];
         %legend(M_leg_all, 'interpreter', 'latex');
-        leg_all = [{'Ref'}; {'Original BSM'}; {'MLS BSM'}];
+        leg_all = [{'Reference'}; {'BSM'}; {'BSM-MagLS'}];
         legend(leg_all, 'location', 'best', 'interpreter', 'latex');
         set(gca, 'fontsize', 20, 'fontname', 'times', 'linewidth', 2);  
         set(gca,'xticklabel',[]);
@@ -574,6 +576,7 @@ if COMPUTE_ITD
         plot(rad2deg(ph_DOA), squeeze(ITD_cmplx_err(:, h, :)), 'linewidth', 3, 'color', c_order{2}); hold on; grid on;    
         plot(rad2deg(ph_DOA), squeeze(ITD_mag_err(:, h, :)), 'linewidth', 3, 'color', c_order{3});
         xlim([0 ph_DOA_max]);
+        ylim([0 600]);
         %xlabel('Azimuth [deg]', 'interpreter', 'latex');
         ylabel('$\epsilon_{\mathrm{ITD}}$ [$\mu s$]', 'interpreter', 'latex');    
         %M_leg_cmplx = cellstr(num2str(M.'));
@@ -582,7 +585,7 @@ if COMPUTE_ITD
         %M_leg_mag = strcat('$M=',M_leg_mag,'$ mag');
         %M_leg_all = [M_leg_cmplx; M_leg_mag];
         %legend(M_leg_all, 'interpreter', 'latex');
-        leg_all = [{'Original BSM'}; {'MLS BSM'}];        
+        leg_all = [{'BSM'}; {'BSM-MagLS'}];        
         legend(leg_all, 'location', 'best', 'interpreter', 'latex');
         set(gca, 'fontsize', 20, 'fontname', 'times', 'linewidth', 2);   
         
@@ -665,7 +668,7 @@ if COMPUTE_ILD
         %M_leg_mag = strcat('$M=',M_leg_mag,'$ mag');
         %M_leg_all = [{'Ref'}; M_leg_cmplx; M_leg_mag];
         %legend(M_leg_all, 'interpreter', 'latex');
-        leg_all = [{'Ref'}; {'Original BSM'}; {'MLS BSM'}];
+        leg_all = [{'Reference'}; {'BSM'}; {'BSM-MagLS'}];
         legend(leg_all, 'location', 'best', 'interpreter', 'latex');
         set(gca, 'fontsize', 20, 'fontname', 'times', 'linewidth', 2);  
         set(gca,'xticklabel',[]);
@@ -675,6 +678,7 @@ if COMPUTE_ILD
         plot(rad2deg(ph_DOA), squeeze(ILD_BSM_cmplx_av_err(:, h, :)), 'linewidth', 3, 'color', c_order{2}); hold on; grid on;    
         plot(rad2deg(ph_DOA), squeeze(ILD_BSM_mag_av_err(:, h, :)), 'linewidth', 3, 'color', c_order{3});
         xlim([0 ph_DOA_max]);
+        ylim([0 15]);
         %xlabel('Azimuth [deg]', 'interpreter', 'latex');
         ylabel('$\epsilon_{\mathrm{ILD}_{\mathrm{av}}}$ [dB]', 'interpreter', 'latex');    
         %M_leg_cmplx = cellstr(num2str(M.'));
@@ -683,7 +687,7 @@ if COMPUTE_ILD
         %M_leg_mag = strcat('$M=',M_leg_mag,'$ mag');
         %M_leg_all = [M_leg_cmplx; M_leg_mag];        
         %legend(M_leg_all, 'interpreter', 'latex');
-        leg_all = [{'Original BSM'}; {'MLS BSM'}];
+        leg_all = [{'BSM'}; {'BSM-MagLS'}];
         legend(leg_all, 'location', 'best', 'interpreter', 'latex');
         set(gca, 'fontsize', 20, 'fontname', 'times', 'linewidth', 2);   
         
@@ -750,6 +754,7 @@ end
 
 
 %% Plots - ILD as func of frequency
+%{
 cb_max_db = 10;
 if COMPUTE_ILD
     f_plot = f_c_max_effective_freq(f_c_max_ERB_ind);
@@ -797,7 +802,7 @@ if COMPUTE_ILD
     end
 
 end
-
+%}
 
 
 

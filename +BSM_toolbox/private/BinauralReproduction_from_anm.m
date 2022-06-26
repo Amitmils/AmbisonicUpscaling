@@ -22,13 +22,13 @@ end
 %%Outputs:
 % bin_sig_rot_t     : (time x 2 x rot_angles) Binaural signal for each rotation angle (if there are rotations...)
 
-%% ================= transform anm_t to frequency domain
+% ================= transform anm_t to frequency domain
 NFFT = 2^nextpow2(size(anm_t, 1));
 anm_f = fft(anm_t, NFFT, 1); 
 % remove negative frequencies
 anm_f = anm_f(1:NFFT/2+1, :);
 
-%% ================= Generate binaural signals - Ambisonics format
+% ================= Generate binaural signals - Ambisonics format
 if DisplayProgress
     fprintf('\n');
     disp('Binaural reproduction calculations:');

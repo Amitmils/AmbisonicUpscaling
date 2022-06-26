@@ -34,6 +34,9 @@ classdef signal_holder
                 audiowrite(strcat(savepath,savefile),obj.signal,obj.fs);
             end
         end
+        function obj = write(obj,path)
+            audiowrite(path+"\"+obj.name+'.wav',obj.signal,obj.fs);
+        end
         function obj = rename(obj,name)
             obj.name = name;
         end
