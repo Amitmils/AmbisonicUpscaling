@@ -43,11 +43,16 @@ N_PW = 15;                                      % SH order of plane-wave synthes
 sig_path = "+examples/data/female_speech.wav";  % location of .wav file - signal
 
 %% ================= parameters/flags - room
-roomDim =       [15.5 9.8 7.5];     % Room Dimensions (L,W,H) [m]
-sourcePos  =    [8.25 7.8 1.7];     % Source position (x,y,z) [m]
-arrayPos   =    [5 5 1.7];          % Receiver position (x,y,z) [m]
-R = 0.9;                            % walls refelection coeff
+roomDim =       [15.5 9.8 7.5];         % Room Dimensions (L,W,H) [m]
+arrayPos   =    [5 5 1.7];              % Receiver position (x,y,z) [m]
+R = 0.9;                                % walls refelection coeff
+% Source position generate relative [r,th,ph] source position [m]
+src_r = 5; src_theta = 90*(pi/180); src_phi = (30)*(pi/180);
+[srcPosx,srcPosy,srcPosz] = s2c(src_theta,src_phi,src_r);
+sourcePos = [srcPosx,srcPosy,srcPosz] + arrayPos; % Source position (x,y,z) [m]
 
+roomSimulationPlot_ISF(roomDim, sourcePos, arrayPos) %Plot room from ACLtoolbox
+drawnow()
 %% ================= parameters/flags - binaural reproduction
 anm_to_reproduce = "est";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
 if strcmp(anm_to_reproduce, "sim")
@@ -72,7 +77,7 @@ if DisplayProgress
     disp(['Critical distance = ' num2str(CriticalDist) ' m']);
 end
 figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
-title("RIR of a_{00}")
+title("RIR of a00")
 xlabel('Time [sec]');
 anm_t = fftfilt(hnm, s); 
 % soundsc(real(anm_t(:,1)), fs);
@@ -202,7 +207,18 @@ if DisplayProgress
 end
 
 % Listen to results - use headphones
+disp("Playing the Binaural signal (HRTF + Ambisonics)")
 soundsc(bin_sig_t, fs);
+pause(2*(size(s,1)/fs))
+disp("Playing the spherical array recordings (the first two channels)")
+soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
+pause(2*(size(s,1)/fs))
+disp("Playing the Original dry signal")
+soundsc(s, fs);
+pause(2*(size(s,1)/fs))
+
+disp("Done!")
+
 
 
 
