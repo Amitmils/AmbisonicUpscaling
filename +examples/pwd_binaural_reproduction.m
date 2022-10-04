@@ -72,6 +72,7 @@ if DisplayProgress
     disp(['Critical distance = ' num2str(CriticalDist) ' m']);
 end
 figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
+title("RIR of a_{00}")
 xlabel('Time [sec]');
 anm_t = fftfilt(hnm, s); 
 % soundsc(real(anm_t(:,1)), fs);
@@ -107,7 +108,9 @@ end
 p_array_t = anm2p(anm_t(:, 1:(N_array + 1)^2), fs, r_array, [th_array, ph_array], sphereType);
 % trim zeros at the end of anm_est_t
 p_array_t = p_array_t(1:size(anm_t, 1), :);
-% soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
+
+%Play the binaural signal 
+%soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
 
 if DisplayProgress
     fprintf('\n');
