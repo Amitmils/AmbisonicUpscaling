@@ -10,8 +10,8 @@ clc;
 
 restoredefaultpath;
 % add ACLtoolbox path
-addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/Github/general'));
-cd('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/Github/general');
+addpath(genpath('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general'));
+cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general');
 
 startup_script();
 rng('default');
@@ -64,7 +64,7 @@ end
 %% generate RIR and convolve with speech
 %signal
 %sig_path = '/Data/dry_signals/demo/SX293.WAV';
-sig_path = '/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/Github/general/+examples/data/female_speech.wav';  % location of .wav file - signal
+sig_path = '/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/+examples/data/female_speech.wav';  % location of .wav file - signal
 [s, desired_fs] = audioread(sig_path);
 %soundsc(s, desired_fs);
 filt_samp    = filt_len * desired_fs;
@@ -94,8 +94,8 @@ disp(['Source position: (r,th,ph) = (' num2str(direct_sound_rel_sph(1),'%.2f') '
 %% ================= HRTFS preprocessing
 % load HRIRs
 N_HRTF = 30;
-HRTFpath =  '/Volumes/GoogleDrive/My Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';
-%HRTFpath =  '/Volumes/GoogleDrive/My Drive/ACLtoolbox/Data/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat';
+HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';
+%HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat';
 load(HRTFpath);         % hobj is HRIR earo object
 hobj.shutUp = false;
 %%Interpolate HRTF to frequencies
@@ -108,7 +108,7 @@ hobj_freq_grid = hobj_freq_grid.toFreq(filt_samp);
 hobj_freq_grid.data = hobj_freq_grid.data(:, 1:ceil(filt_samp/2)+1, :);
 
 %% ================= Load WignerD Matrix
-WignerDpath = '/Volumes/GoogleDrive/My Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';
+WignerDpath = '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';
 load(WignerDpath);
 N_HRTF_rot = 30;
 DN = (N_HRTF_rot + 1)^2; % size of the wignerD matrix
@@ -153,7 +153,7 @@ for m = 1:length(M)
     % trim zeros at the end of p_array_t
     p_array_t = p_array_t(1:size(anm_t, 1), :);
     %p_array_t = circshift(p_array_t, round((size(p_array_t, 1) - 1) / 2), 1);        
-    % soundsc(real([p_array_t(:, 1).'; p_array_t(:, 20).']), desired_fs);
+    % soundsc(real([p_array_t(:, 1).'; p_array_t(:, 6).']), desired_fs);
     fprintf('Finished calculating array measurements\n');
     
     %% ================= calculate array steering vectors (for BSM filters)    
