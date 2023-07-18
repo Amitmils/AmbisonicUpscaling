@@ -21,7 +21,7 @@ rng('default');
 filt_len = 0.032;                                      % filters (BSM/HRTF) length [sec]
 arrayType = 1;                                         % 0 - spherical array, 1 - semi-circular array, 2 - full-circular array
 rigidArray = 1;                                        % 0 - open array, 1 - rigid array
-M = 6;                                                 % number of microphones
+M = 32;                                                 % number of microphones
 r_array = 0.1;                                         % array radius
 head_rot_az = ...
     wrapTo2Pi(deg2rad([0, 30, 60]));                         % vector of head rotations [rad]
@@ -29,7 +29,7 @@ normSV = true;                                         % true - normalize steeri
 
 % parameters/flags - general
 c = 343;                                               % speed of sound [m/s]
-desired_fs = 48000;                                   % choose samplong frequency in Hz
+desired_fs = 48000;                                    % choose samplong frequency in Hz
 N_PW = 14;                                             % SH order of plane-wave synthesis
 
 filt_samp    = filt_len * desired_fs;
@@ -58,12 +58,19 @@ SNR_lin = sig_s / sig_n;
 % New CVX flag
 magLS_cvx = false;
 
-arrayTypeTxt = 'Glasses';
-% Text variables for plots 
+% Text variables
 if ~rigidArray
     sphereType = 'open';
 else
     sphereType = 'rigid';
+end
+switch arrayType 
+    case 0
+        arrayTypeTxt = [sphereType,'Spherical'];
+    case 1
+        arrayTypeTxt = [sphereType,'SemiCirc'];
+    case 2
+        arrayTypeTxt = [sphereType,'FullCirc'];
 end
 
 use_mcroomsim = true;
@@ -74,8 +81,8 @@ sig_idx = 1;                                           % 1: male speech, 2,3: fe
 %signal
 sig_paths = "/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/" + ...
     "Research/FB_BFBR/Data/dry_signals/" + ["SI1138.wav",...
-    "SI1392",...
-    "SI1461"]; % male, female, female
+    "SI1392.wav",...
+    "SI1461.wav"]; % male, female, female
 sig_path = sig_paths(sig_idx);
 
 if sig_idx == 1
@@ -97,17 +104,28 @@ freqs_sig    = ( 0 : (filt_samp / 2) - 1 ) * desired_fs / filt_samp;
 freqs_sig(1) = 1/4 * freqs_sig(2); %to not divide by zero
 
 % Room params
-roomDim = [10 6 3];
-sourcePos = [4 3.5 1.7] + [1 1 0];
-arrayPos = [2 2 1.7];
-R = 0.7; % walls refelection coeff - 0.7: T_60=0.19s, 0.92: T_60=0.75s
+switch sig_idx
+    case 1
+        R = 0.83; % walls refelection coeff - 0.7: T_60=0.19s, 0.92: T_60=0.75s
+        roomDim = [10 6 3];
+        arrayPos = [2 2 1.7];
+        sourcePos = [5 4.5 1.7];
+    case 2
+        R = 0.86; % walls refelection coeff - 0.7: T_60=0.19s, 0.92: T_60=0.75s
+        roomDim = [7 5 3];
+        arrayPos = [3 2.5 1.7];
+        sourcePos = [6 4 1.7];        
+    case 3
+        R = 0.92; % walls refelection coeff - 0.7: T_60=0.19s, 0.92: T_60=0.75s
+        roomDim = [8 5 3];
+        arrayPos = [4 4 1.7];
+        sourcePos = [6 2 1.7];        
+end
 
 if use_mcroomsim
     % MCRoomSim
     Room = SetupRoom('Dim', roomDim, 'Absorption', (1 - R^2) * ones(6, 6));
     Sources = AddSource('Location', sourcePos, 'Type', sig_gender);
-    % Receivers = AddReceiver('Location', arrayPos, 'Type', 'sphharm', ...
-    %     'MaxOrder', N_PW, 'ComplexSH', true);
     Receivers = AddReceiver('Location', arrayPos, 'Type', 'sphharm', ...
         'MaxOrder', N_PW, 'ComplexSH', false);
     Options = MCRoomSimOptions('Fs', desired_fs);  % consider adding Duration
@@ -117,12 +135,10 @@ if use_mcroomsim
     
     % Using GDrive ACLtoolbox
     P = MCRoomPerm(N_PW)';
-    % RIR = (P * RIR.').';
     C = SHc2r(N_PW)';
     RIR = (C * P * RIR.').';
 
     % old adjustment
-
     %{
 
     %   1. order adjustments (ours: -n:1:n, MCRoomSim: n,-n,(n-1),-(n-1),...0)
@@ -157,10 +173,19 @@ if use_mcroomsim
 
     %}
         
-    mcroomsim_T60 = RoomParams.T60(RIR(:,1), desired_fs);
-    fprintf('MCRoomSim T60 = %.2f sec\n', mcroomsim_T60);
+    T60 = RoomParams.T60(RIR(:,1), desired_fs);
+    fprintf('MCRoomSim T60 = %.2f sec\n', T60);
     % figure; plot((0:size(RIR,1)-1)/desired_fs, real(RIR(:,1))); xlabel('Time [sec]'); % plot the RIR of a00
     anm_t = fftfilt(RIR, s);
+
+    % Spherical coordinates of direct sound 
+    direct_sound_rel_cart = sourcePos - arrayPos;
+    [th0, ph0, r0]=c2s(direct_sound_rel_cart(1), direct_sound_rel_cart(2), direct_sound_rel_cart(3));
+    ph0 = mod(ph0, 2*pi);
+    direct_sound_rel_sph = [r0, th0, ph0];
+    disp(['Source position: (r,th,ph) = (' num2str(direct_sound_rel_sph(1),'%.2f') ','...
+        num2str(direct_sound_rel_sph(2)*180/pi,'%.2f') ','...
+        num2str(direct_sound_rel_sph(3)*180/pi,'%.2f') ')']);
 
 else
     % Github ACL toolbox
@@ -170,7 +195,7 @@ else
     % figure; plot((0:size(hnm,1)-1)/desired_fs, real(hnm(:,1))); xlabel('Time [sec]'); % plot the RIR of a00
     anm_t = fftfilt(hnm, s);
     
-    %%Spherical coordinates of direct sound 
+    % Spherical coordinates of direct sound 
     direct_sound_rel_cart = parametric_rir.relative_pos(1, :);
     [th0, ph0, r0]=c2s(direct_sound_rel_cart(1), direct_sound_rel_cart(2), direct_sound_rel_cart(3));
     ph0 = mod(ph0, 2*pi);
@@ -181,8 +206,8 @@ else
 end
 
 
-%% Load ATF
-N_SV = 30;
+%% Calculate steering vectors
+N_SV = N_PW;
 n_mic = M;
 BSMobj.n_mic = n_mic;
 BSMobj.r_array = r_array;
@@ -259,6 +284,19 @@ BSMobj.filt_samp = filt_samp;
 BSMobj.magLS_cvx = magLS_cvx;
 %
 
+%% ================== Create Listening experiment struct
+ListExp.sig_path = sig_path;
+ListExp.N_SV = N_SV;
+ListExp.N_PW = N_PW;
+ListExp.sig_gender = sig_gender;
+ListExp.roomDim = roomDim;
+ListExp.arrayPos = arrayPos;
+ListExp.sourcePos = sourcePos;
+ListExp.use_mcroomsim = use_mcroomsim;
+ListExp.n_mic = n_mic;
+ListExp.N_HRTF = N_HRTF;
+ListExp.T60 = T60;
+ListExp.direct_sound_rel_sph = direct_sound_rel_sph;
 
 %% ================= calculate array measurements - time domain
 
@@ -447,41 +485,44 @@ for h=1:length(head_rot_az)
     %soundsc(p_REF_t, desired_fs);
 
     %% ================= Save audio
-    output_path = ['/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/',...
-        'Research/FB_BFBR/BSM/Journal_paper_ListExp_v2/MUSHRA_Matlab_template/',...
-        'Signals/Signals/ph=',num2str(rad2deg(head_rot_az(h))),'/'];
+    output_path = sprintf("/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/" + ...
+        "Research/FB_BFBR/BSM/Journal_paper_ListExp_v2/MUSHRA_Matlab_template/" + ...
+        "Signals/Signals/%s/sig=%d/",arrayTypeTxt, sig_idx);
+    mkdir(output_path);
+    save(strcat(output_path, "ListExpDetails.mat"), "ListExp");
+    
+    rot_str = sprintf("%d",round(rad2deg(head_rot_az(h))));
+    output_path = strcat(output_path, "ph=", rot_str, "/");
     mkdir(output_path);
 
-    % ref
-    p_ref_fileName = [output_path,'ph=',num2str(rad2deg(head_rot_az(h))),...
-        '_Ambisonics_N',num2str(N_REF),'_REF.wav'];
-    p_ref = p_REF_t;
+    % Reference signal
+    p_ref_fileName = strcat(output_path, "ph=", rot_str, ...
+        "_Ambisonics_N", sprintf("%d", N_REF),"_REF.wav");
     save_audio(p_ref_fileName, p_REF_t, desired_fs);
 
-    % anchor
-    p_anchor_fileName = [output_path,'ph=',num2str(rad2deg(head_rot_az(h))),...
-        '_Ambisonics_N',num2str(N_ANCHOR),'_ANCHOR.wav'];
+    % Anchor signal
+    p_anchor_fileName = strcat(output_path, "ph=", rot_str, ...
+        "_Ambisonics_N", sprintf("%d", N_ANCHOR),"_ANCHOR.wav");
     save_audio(p_anchor_fileName, p_ANCHOR_t, desired_fs);
 
     % cmplx LS - comp
-    p_BSM_cmplx_comp_fileName = [output_path,'ph=',num2str(rad2deg(head_rot_az(h))),...
-        '_BSM_N',num2str(N_PW),'_',arrayTypeTxt,'_Comp_CmplxLS.wav'];
+    p_BSM_cmplx_comp_fileName = strcat(output_path, "ph=", rot_str, ...
+        "_BSM_N", sprintf("%d_", N_PW), arrayTypeTxt, "_Comp_CmplxLS.wav");
     save_audio(p_BSM_cmplx_comp_fileName, p_BSM_cmplx_Comp_t, desired_fs);
 
     % cmplx LS - no comp
-    p_BSM_cmplx_NoComp_fileName = [output_path,'ph=',num2str(rad2deg(head_rot_az(h))),...
-        '_BSM_N',num2str(N_PW),'_',arrayTypeTxt,'_NoComp_CmplxLS.wav'];
+    p_BSM_cmplx_NoComp_fileName = strcat(output_path, "ph=", rot_str, ...
+        "_BSM_N", sprintf("%d_", N_PW), arrayTypeTxt, "_NoComp_CmplxLS.wav");
     save_audio(p_BSM_cmplx_NoComp_fileName, p_BSM_cmplx_NoComp_t, desired_fs);
 
     % Mag LS - comp
-    p_BSM_magLS_comp_fileName = [output_path,'ph=',num2str(rad2deg(head_rot_az(h))),...
-        '_BSM_N',num2str(N_PW),'_',arrayTypeTxt,'_Comp_MagLS.wav'];
+    p_BSM_magLS_comp_fileName = strcat(output_path, "ph=", rot_str, ...
+        "_BSM_N", sprintf("%d_", N_PW), arrayTypeTxt, "_Comp_MagLS.wav");
     save_audio(p_BSM_magLS_comp_fileName, p_BSM_mag_Comp_t, desired_fs);
 
-
     % Mag LS - no comp
-    p_BSM_magLS_NoComp_fileName = [output_path,'ph=',num2str(rad2deg(head_rot_az(h))),...
-        '_BSM_N',num2str(N_PW),'_',arrayTypeTxt,'_NoComp_MagLS.wav'];
+    p_BSM_magLS_NoComp_fileName = strcat(output_path, "ph=", rot_str, ...
+        "_BSM_N", sprintf("%d_", N_PW), arrayTypeTxt, "_NoComp_MagLS.wav");
     save_audio(p_BSM_magLS_NoComp_fileName, p_BSM_mag_NoComp_t, desired_fs);
     
     fprintf('Finished saving signals for head rotation idx = %d/%d\n'...
