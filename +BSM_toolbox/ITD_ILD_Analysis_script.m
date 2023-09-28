@@ -10,16 +10,16 @@ clc;
 
 restoredefaultpath;
 % add ACLtoolbox path
-addpath(genpath('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general'));
-cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/');
+addpath(genpath('/Users/orberebi/Documents/GitHub/general'));
+%cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/');
 
 startup_script();
 rng('default');
 
 % add AKtoolbox to path (from old ACLtoolbox in shared GoogleDrive)
-addpath(genpath('/Users/liormadmoni/Google Drive/ACLtoolbox/Third_party/AKtools/'));
+addpath(genpath('/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/functions/AKtools/'));
 % add export_fig to path
-addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302'));
+%addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302'));
 
 % parameters/flags - array
 filt_len = 0.032;                                      % filters (BSM/HRTF) length [sec]
@@ -36,7 +36,7 @@ c = 343;                                               % speed of sound [m/s]
 desired_fs = 48000;                                    % choose samplong frequency in Hz
 N_PW = 30;                                             % SH order of plane-wave synthesis
 saveFiles = false;                                     % save MATLAB files before time interpolation?
-save_plot_flag = true;                                % save plots locally
+save_plot_flag = false;                                % save plots locally
 
 % parameters/flags - BSM design
 inv_opt = 1;                                           % opt=1 -> ( (1 / lambda) * (A * A') + eye )  |||| opt2=1 -> ((A * A') + lambda * eye);
@@ -129,7 +129,7 @@ end
 %% ================= HRTFS preprocessing
 % load HRIRs
 N_HRTF = 30;
-HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';
+HRTFpath =  '/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/HRTF/KU100/earoHRIR_KU100_Measured_2702Lebedev.mat';
 % HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat';
 load(HRTFpath);         % hobj is HRIR earo object
 hobj.shutUp = false;
@@ -144,7 +144,7 @@ hobj_freq_grid = hobj_freq_grid.toFreq(filt_samp);
 hobj_freq_grid.data = hobj_freq_grid.data(:, 1:ceil(filt_samp/2)+1, :);
 
 %% ================= Load WignerD Matrix
-WignerDpath = '/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Data/WignerDMatrix_diagN=32.mat';
+WignerDpath = '/Users/orberebi/Documents/GitHub/general/+examples/data/WignerDMatrix_diagN=32.mat';
 load(WignerDpath);
 N_HRTF_rot = 30;
 DN = (N_HRTF_rot + 1)^2; % size of the wignerD matrix
@@ -217,6 +217,7 @@ for m = 1:length(M)
         BSMobj.normSV = normSV;
         % Complex version
         BSMobj.magLS = false;
+        BSMobj.magLS_cvx = false;
         [c_BSM_cmplx_l, c_BSM_cmplx_r] = BSM_toolbox.GenerateBSMfilters_faster(BSMobj, V_k, hobj_rot_BSM);
         
         % MagLS version

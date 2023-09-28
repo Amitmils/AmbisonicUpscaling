@@ -9,11 +9,11 @@ clc;
 restoredefaultpath;
 
 % add ACLtoolbox path
-addpath(genpath('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general'));
-cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/');
+addpath(genpath('/Users/orberebi/Documents/GitHub/general/'));
+cd('/Users/orberebi/Documents/GitHub/general/');
 
 % add export_fig to path
-addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302'));
+%addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302'));
 
 startup_script();
 rng('default');
@@ -104,7 +104,7 @@ V_BSM = permute(V_BSM, [3 2 1]);
 
 %% ================== load HRIRs
 N_HRTF = 30;
-HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KU100_Measured_2702Lebedev.mat';
+HRTFpath =  '/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/HRTF/KU100/earoHRIR_KU100_Measured_2702Lebedev.mat';
 load(HRTFpath);         % hobj is HRIR earo object
 hobj.shutUp = true;
 hobj_full = hobj;
@@ -120,7 +120,7 @@ hobj_full = hobj_full.toFreq(filt_samp);
 hobj_full.data = hobj_full.data(:, 1:ceil(filt_samp/2)+1, :);
 
 % Rotate HRTFs
-WignerDpath = '/Volumes/GoogleDrive/My Drive/ACLtoolbox/Data/WignerDMatrix_diagN=32.mat';
+WignerDpath = '/Users/orberebi/Documents/GitHub/general/+examples/data/WignerDMatrix_diagN=32.mat';
 load(WignerDpath);
 N_HRTF_rot = N_HRTF;
 DN = (N_HRTF_rot + 1)^2; % size of the wignerD matrix
