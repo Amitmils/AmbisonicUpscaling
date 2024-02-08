@@ -290,7 +290,6 @@ BSMobj.magLS_cvx = magLS_cvx;
 ListExp.sig_path = sig_path;
 ListExp.N_ATF = N_ATF;
 ListExp.N_PW = N_PW;
-ListExp.sig_gender = sig_gender;
 ListExp.roomDim = roomDim;
 ListExp.arrayPos = arrayPos;
 ListExp.sourcePos = sourcePos;
