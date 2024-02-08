@@ -12,6 +12,7 @@
 % Date created: January 20, 2021
 % Created by:   Lior Madmoni
 % Modified:     February 4, 2021
+% Modified:     February 8, 2024 O.B (added MagLS HRTF preprocessing) 
 
 clearvars;
 close all;
@@ -26,28 +27,30 @@ startup_script();
 HRTFpath = '+examples/data/earoHRIR_KU100_Measured_2702Lebedev.mat';  
 WignerDpath = '+examples/data/WignerDMatrix_diagN=32.mat';   % needed just for headRotation
 
+
 %% ================= parameters/flags - general
 c = soundspeed();               % speed of sound [m/s]
 DisplayProgress = true;         % true: display progress on command window
 
 %% ================= parameters/flags - spherical array
-N_array = 4;                    % SH order of array
+N_array = 2;                    % SH order of array
 r_array = 0.042;                % array radius. 0.042 is similar to EM32 array
-sphereType = "open";            % "open" / "rigid"
+sphereType = "rigid";            % "open" / "rigid"
 
 %================= generate spherical coordinates of spherical array   
 [th_array, ph_array, weights_array] = sampling_schemes.t_design(N_array);                
 
 %% ================= parameters/flags - source
-N_PW = 15;                                      % SH order of plane-wave synthesis
+N_PW = 35;                                      % SH order of plane-wave synthesis
 sig_path = "+examples/data/female_speech.wav";  % location of .wav file - signal
+%sig_path = "+examples/data/casta.wav";  % location of .wav file - signal
 
 %% ================= parameters/flags - room
 roomDim =       [15.5 9.8 7.5];         % Room Dimensions (L,W,H) [m]
 arrayPos   =    [5 5 1.7];              % Receiver position (x,y,z) [m]
-R = 0.9;                                % walls refelection coeff
+R = 0.8;                                % walls refelection coeff
 % Source position generate relative [r,th,ph] source position [m]
-src_r = 5; src_theta = 90*(pi/180); src_phi = (30)*(pi/180);
+src_r = 5; src_theta = 90*(pi/180); src_phi = (-45)*(pi/180);
 [srcPosx,srcPosy,srcPosz] = s2c(src_theta,src_phi,src_r);
 sourcePos = [srcPosx,srcPosy,srcPosz] + arrayPos; % Source position (x,y,z) [m]
 
@@ -79,7 +82,8 @@ end
 figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
 title("RIR of a00")
 xlabel('Time [sec]');
-anm_t = fftfilt(hnm, s); 
+anm_t = hnm; % O.B
+%anm_t = fftfilt(hnm, s); 
 % soundsc(real(anm_t(:,1)), fs);
 
 % transform to frequency domain
@@ -176,7 +180,8 @@ end
 
 % General function to generates binaural signals with or without head rotations over azimuth
 % according to [3] eq. (9)
-[bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath);
+[bin_sig_rot_t_LS, ~] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath,false);
+[bin_sig_rot_t_MagLS, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath,true);
 % *** NOTE: it is much more efficient to use RIR-anm instead of signals containing
 % anm, but this is an example for binaural reproduction from estimated anm.
 % If RIR is given, use it instead of anm_BR ***
@@ -191,28 +196,43 @@ if headRotation
     rot_idx = 1;
     
     % create the binaural signal from selected rotation index
-    bin_sig_t = [squeeze(bin_sig_rot_t(:, 1, rot_idx)),...
-        squeeze(bin_sig_rot_t(:, 2, rot_idx))];
+    bin_sig_t_LS = [squeeze(bin_sig_rot_t_LS(:, 1, rot_idx)),...
+        squeeze(bin_sig_rot_t_LS(:, 2, rot_idx))];
+    % create the binaural signal from selected rotation index
+    bin_sig_t_MagLS = [squeeze(bin_sig_rot_t_MagLS(:, 1, rot_idx)),...
+        squeeze(bin_sig_rot_t_MagLS(:, 2, rot_idx))];
 else      
-    bin_sig_t = bin_sig_rot_t;    
+    bin_sig_t_LS    = bin_sig_rot_t_LS;  
+    bin_sig_t_MagLS = bin_sig_rot_t_MagLS;  
 end
-% trim to size before power of 2 padding
-bin_sig_t(size(anm_t, 1) + 1:end,:) = [];
+% % trim to size before power of 2 padding
+% bin_sig_t(size(anm_t, 1) + 1:end,:) = [];
 
 if DisplayProgress
     fprintf('\n');
     disp('Binaural signals dimensions:');
     disp('===========================');
-    disp(['bin_sig_t is of size (samples, ears (1 = left) ) = (' num2str(size(bin_sig_t, 1),'%d') ', ' num2str(size(bin_sig_t, 2),'%d') ')']);
+    disp(['bin_sig_t is of size (samples, ears (1 = left) ) = (' num2str(size(bin_sig_t_LS, 1),'%d') ', ' num2str(size(bin_sig_t_LS, 2),'%d') ')']);
 end
 
+% Convolve BRIR with dry signal
+p_l = fftfilt(bin_sig_t_LS(:,1), s); p_r = fftfilt(bin_sig_t_LS(:,2), s); 
+bin_sig_t_LS = [p_l,p_r];
+
+p_l = fftfilt(bin_sig_t_MagLS(:,1), s); p_r = fftfilt(bin_sig_t_MagLS(:,2), s); 
+bin_sig_t_MagLS = [p_l,p_r];
+
+
 % Listen to results - use headphones
-disp("Playing the Binaural signal (HRTF + Ambisonics)")
-soundsc(bin_sig_t, fs);
+disp("Playing the Binaural signal (HRTF + Ambisonics) Least Squares")
+soundsc(bin_sig_t_LS, fs);
 pause(2*(size(s,1)/fs))
-disp("Playing the spherical array recordings (the first two channels)")
-soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
+disp("Playing the Binaural signal (HRTF + Ambisonics) Magnitude Least Squares")
+soundsc(bin_sig_t_MagLS, fs);
 pause(2*(size(s,1)/fs))
+%disp("Playing the spherical array recordings (the first two channels)")
+%soundsc(real([p_array_t(:, 1).'; p_array_t(:, 2).']), fs); 
+%pause(2*(size(s,1)/fs))
 disp("Playing the Original dry signal")
 soundsc(s, fs);
 pause(2*(size(s,1)/fs))

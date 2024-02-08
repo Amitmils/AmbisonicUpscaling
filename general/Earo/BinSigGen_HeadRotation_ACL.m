@@ -1,10 +1,11 @@
-function [bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_f, N, headRotation, WignerDpath)
+function [bin_sig_rot_t, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_f, N, headRotation, WignerDpath,magls_flag)
 arguments
     hobj earo
     anm_f (:, :) double
     N (1, 1) double
     headRotation (1, 1) logical = false
     WignerDpath (1,1) string = ''
+    magls_flag (1, 1) logical = true
 end
 % This function generate BRIR with head rotation for a given HRTF (hobj)
 % and plane-waves anm
@@ -29,12 +30,7 @@ else
     rotAngles = deg2rad(0);
 end
 
-% SH transform
-if strcmp(hobj.dataDomain{2},'SPACE')
-    hobj = hobj.toSH(N, 'SRC');
-else
-    warning('hobj is already in the SH domain')
-end   
+ 
 
 % Transform HRTFs to frequency domain
 NFFT = size(anm_f, 2);
@@ -44,6 +40,31 @@ hobj = hobj.toFreq(NFFT);
 % Trim negative frequencies
 hobj.data = hobj.data(:, 1:NFFT/2 + 1, :);
 anm_f = anm_f(:, 1:NFFT/2 + 1);
+
+if magls_flag
+    fs = hobj.fs;
+    f_vec = linspace(0,fs/2,NFFT/2+1).';
+    
+    N_high = 35;
+    Y_low = sh2(N,hobj.sourceGrid.elevation,hobj.sourceGrid.azimuth); % spherical harmonics matrix
+    Y_high = sh2(N_high,hobj.sourceGrid.elevation,hobj.sourceGrid.azimuth); % spherical harmonics matrix
+    cutOffFreq  = 2e3;
+    [H_l_nm_MagLS, H_r_nm_MagLS] = computeMagLS_imp(hobj.data, f_vec, N, Y_low, cutOffFreq, Y_high);
+    
+end
+
+% SH transform
+if strcmp(hobj.dataDomain{2},'SPACE')
+    hobj = hobj.toSH(N, 'SRC');
+else
+    warning('hobj is already in the SH domain')
+end  
+
+if magls_flag
+    hobj.data(:,:,1) = H_l_nm_MagLS.';
+    hobj.data(:,:,2) = H_r_nm_MagLS.';
+end
+
 
 % Iterate through head rotation angles
 if ~hobj.shutUp, fprintf('Generating BRIRs...\n'); end;
