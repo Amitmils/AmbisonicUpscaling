@@ -33,9 +33,12 @@ c = soundspeed();               % speed of sound [m/s]
 DisplayProgress = true;         % true: display progress on command window
 
 %% ================= parameters/flags - spherical array
-N_array = 2;                    % SH order of array
+N_array = 3;                    % SH order of array
 r_array = 0.042;                % array radius. 0.042 is similar to EM32 array
 sphereType = "rigid";            % "open" / "rigid"
+
+anm_to_reproduce = "est";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
+headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
 %================= generate spherical coordinates of spherical array   
 [th_array, ph_array, weights_array] = sampling_schemes.t_design(N_array);                
@@ -57,7 +60,6 @@ sourcePos = [srcPosx,srcPosy,srcPosz] + arrayPos; % Source position (x,y,z) [m]
 roomSimulationPlot_ISF(roomDim, sourcePos, arrayPos) %Plot room from ACLtoolbox
 drawnow()
 %% ================= parameters/flags - binaural reproduction
-anm_to_reproduce = "est";       % binaural reproduction of ("sim": simulated anm, "est": estimated anm)
 if strcmp(anm_to_reproduce, "sim")
     N_BR = N_PW;                % SH order of Ambisonics signal
 elseif strcmp(anm_to_reproduce, "est")
@@ -65,7 +67,6 @@ elseif strcmp(anm_to_reproduce, "est")
 else
     error("Not a valid anm type for reproduction");
 end
-headRotation = false;            % true: generate rotated version of anm over azimuth - useful for head-tracking applications
 
 %% generate RIR and convolve with speech
 [s, fs] = audioread(sig_path);
@@ -79,10 +80,13 @@ if DisplayProgress
     fprintf("T60 = %.2f sec\n", T60);
     disp(['Critical distance = ' num2str(CriticalDist) ' m']);
 end
-figure; plot((0:size(hnm,1)-1)/fs, real(hnm(:,1))); % plot the RIR of a00
+
+anm_t = hnm; % O.B
+anm_t = anm_t(1:round(T60*fs),:); % O.B trim samples larger then T60
+figure; plot((0:size(anm_t,1)-1)/fs, real(anm_t(:,1))); % plot the RIR of a00
 title("RIR of a00")
 xlabel('Time [sec]');
-anm_t = hnm; % O.B
+
 %anm_t = fftfilt(hnm, s); 
 % soundsc(real(anm_t(:,1)), fs);
 
@@ -182,9 +186,7 @@ end
 % according to [3] eq. (9)
 [bin_sig_rot_t_LS, ~] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath,false);
 [bin_sig_rot_t_MagLS, rotAngles] = BinSigGen_HeadRotation_ACL(hobj, anm_BR(1:(N_BR+1)^2, :), N_BR, headRotation, WignerDpath,true);
-% *** NOTE: it is much more efficient to use RIR-anm instead of signals containing
-% anm, but this is an example for binaural reproduction from estimated anm.
-% If RIR is given, use it instead of anm_BR ***
+
 
 if DisplayProgress
     fprintf('Finished generating binaural signals\n');
