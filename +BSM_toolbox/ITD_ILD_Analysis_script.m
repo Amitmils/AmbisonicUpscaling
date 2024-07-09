@@ -10,14 +10,16 @@ clc;
 
 restoredefaultpath;
 % add ACLtoolbox path
-addpath(genpath('/Users/orberebi/Documents/GitHub/general'));
+%addpath(genpath('../../'));
 %cd('/Users/liormadmoni/Google Drive/Lior/Acoustics lab/Matlab/Research/Github/general/');
 
 startup_script();
 rng('default');
+set(0,'DefaultFigureWindowStyle','docked')
 
 % add AKtoolbox to path (from old ACLtoolbox in shared GoogleDrive)
-addpath(genpath('/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/functions/AKtools/'));
+%addpath(genpath('/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/functions/AKtools/'));
+%addpath(genpath('/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/functions/AKtools/'));
 % add export_fig to path
 %addpath(genpath('/Volumes/GoogleDrive/My Drive/Lior/Acoustics lab/Matlab/Research/FB_BFBR/Toolboxes/altmany-export_fig-9aba302'));
 
@@ -129,8 +131,7 @@ end
 %% ================= HRTFS preprocessing
 % load HRIRs
 N_HRTF = 30;
-HRTFpath =  '/Users/orberebi/Documents/GitHub/Binaural_Cues_Optimization/HRTF/KU100/earoHRIR_KU100_Measured_2702Lebedev.mat';
-% HRTFpath =  '/Users/liormadmoni/Google Drive/ACLtoolbox/Data/HRTF/earoHRIR_KEMAR_TU_BEM_OnlyHead.mat';
+HRTFpath =  './+examples/data/earoHRIR_KU100_Measured_2702Lebedev.mat';
 load(HRTFpath);         % hobj is HRIR earo object
 hobj.shutUp = false;
 [th_BSMgrid_vec, ph_BSMgrid_vec] = BSM_toolbox.BSMgrid(source_distribution, Q);
@@ -144,7 +145,7 @@ hobj_freq_grid = hobj_freq_grid.toFreq(filt_samp);
 hobj_freq_grid.data = hobj_freq_grid.data(:, 1:ceil(filt_samp/2)+1, :);
 
 %% ================= Load WignerD Matrix
-WignerDpath = '/Users/orberebi/Documents/GitHub/general/+examples/data/WignerDMatrix_diagN=32.mat';
+WignerDpath = './+examples/data/WignerDMatrix_diagN=32.mat';
 load(WignerDpath);
 N_HRTF_rot = 30;
 DN = (N_HRTF_rot + 1)^2; % size of the wignerD matrix
