@@ -1,1 +1,1 @@
-# AmbisonicUpscaling
+# Ambisonic Upscaling
