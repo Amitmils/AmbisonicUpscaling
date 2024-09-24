@@ -75,8 +75,10 @@ def encode_signal(s,sh_order,ph,th,type = 'complex',plot=False):
         debug = np.ones((1,16))
         debug = debug * (4 * np.pi) / (debug.shape[1] + 1)**2
         spa.plot.sh_coeffs(y,cbar=False) #Mirrored when use complex (Why?)
-    encoded_signal = s.reshape(-1,1) @ y * (4 * np.pi) / (sh_order + 1)**2
-    print("Energy of Encoded Signal:", np.mean(encoded_signal*np.conj(encoded_signal)))
+    encoded_signal = 0
+    for dir in range(y.shape[0]):
+        encoded_signal += s.reshape(-1,1) @ y[dir].reshape(1,-1)
+    #print("Energy of Encoded Signal:", np.mean(encoded_signal*np.conj(encoded_signal)))
     return encoded_signal
 
 
