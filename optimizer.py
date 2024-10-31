@@ -83,6 +83,13 @@ class optimizer:
         return Omega_opt
 
     def optimize(self,Bk,mask=None,D_prior=None):
+        if isinstance(Bk,tuple):
+            #cheap hack for MP
+            tmp = Bk
+            Bk = tmp[0]
+            mask = tmp[1]
+            D_prior = tmp[2]
+
         #Dim Reduction
         if mask is None:
             mask = np.ones(self.Y_p.shape[1],dtype=bool)

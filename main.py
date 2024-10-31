@@ -5,7 +5,8 @@ import math
 import time 
 from optimizer import optimizer
 import scipy.io
-
+import multiprocessing as mp
+from tqdm import tqdm
 
 if __name__ == '__main__':
 
@@ -14,6 +15,7 @@ if __name__ == '__main__':
     constraint_tol = 0 #only for GD_lagrange_multi
     
     grid_type = 'lebedev' #lebedev or manual
+    multi_processing = True
 
     tau = 1024 #number of samples
     num_bins = 45
@@ -26,7 +28,7 @@ if __name__ == '__main__':
     upscale_order = 3
 
 
-    max_num_windows = 20
+    max_num_windows = 1000
 
     filename_list = [r"data/sound_files/male_speech.wav",r"data/sound_files/female_speech.wav"]
     th_list=[90,90] #degrees
@@ -103,17 +105,54 @@ if __name__ == '__main__':
 
     s_subbands = np.zeros((num_windows,num_bins,P,tau)) #num_windows, num_bins | P = num of SH coeff | tau = num of samples
     opt = optimizer(Y_p, alpha = 1,constraint_tol=constraint_tol,method=method)
-    for band in range(num_bins):
-        print(f"band {band}")
-        for window in range(num_windows):
-            start = time.time()
-            print(f"window {window}")
-            Bk = anm_t_subbands_windowed[window,band,:,:].T
-            s_subbands[window,band,:,:],Dk = opt.optimize(Bk,mask,D_prior=None)#imoptimize(Bk,Y_p,alpha = 1,D_prior = Dk if window > 0 else None )
-            # tmp = s_subbands[window,band,:,:]
-            # plot_on_2D(azi=P_ph,zen=P_th,values=tmp[:,0],title=f"Band {band} in Plane Wave Dictonary\n$\\theta$ = {th_list[start_idx:end_idx+1]} \n$\\phi$ = {ph_list[start_idx:end_idx+1]}")
-            # plt.show()
-            print(f"{time.time()-start} secs")
+
+    if not(multi_processing):
+
+        # Create a single progress bar for the outer loop (bands)
+        outer_bar = tqdm(total=num_bins, desc='Bands', position=0, leave=True)
+        for band in range(num_bins):
+            outer_bar.set_postfix({'Current Band': band})  # Update current band in the outer bar
+            inner_bar = tqdm(total=num_windows, desc='Windows', position=1, leave=False)  # Inner bar for windows
+            
+            for window in range(num_windows):
+                start = time.time()
+                Bk = anm_t_subbands_windowed[window, band, :, :].T
+                
+                # Call your optimization function
+                s_subbands[window, band, :, :], Dk = opt.optimize(Bk, mask, D_prior=None)
+                
+                inner_bar.update(1)  # Update inner progress bar
+                # print(f"{time.time()-start:.2f} secs for window {window}")
+
+            inner_bar.close()  # Close the inner progress bar after finishing the inner loop
+            outer_bar.update(1)  # Update outer progress bar
+        # for band in range(num_bins):
+        #     print(f"band {band}")
+        #     for window in range(num_windows):
+        #         start = time.time()
+        #         print(f"window {window}")
+        #         Bk = anm_t_subbands_windowed[window,band,:,:].T
+        #         s_subbands[window,band,:,:],Dk = opt.optimize(Bk,mask,D_prior=None)#imoptimize(Bk,Y_p,alpha = 1,D_prior = Dk if window > 0 else None )
+        #         print(f"{time.time()-start} secs")
+    else:
+        args = [(anm_t_subbands_windowed[window,band,:,:].T, mask, None) for window in range(num_windows) for band in range(num_bins)]
+        print("Multi Processing")
+        start = time.time()
+        with mp.Pool(processes=mp.cpu_count()) as pool:
+            results = []
+            with tqdm(total=len(args)) as pbar:
+                for result in pool.imap(opt.optimize, args):
+                    results.append(result)
+                    pbar.update()  # Update the progress bar for each completed task
+
+        #unpack
+        for i, (s_subband, Dk) in enumerate(results):
+            window = i // num_bins
+            band = i % num_bins
+            s_subbands[window, band, :, :] = s_subband
+            # Dks.append(Dk)
+        print(f"{time.time()-start} secs")
+
     file = os.path.join('data/output',f"{'_'.join([os.path.basename(file_name).split('.wav')[0] for file_name in filename_list[start_idx:end_idx+1]])}_FBbins_{num_bins}_grid_{grid_type}_th_{'_'.join([str(th) for th in th_list[start_idx:end_idx+1]])}_ph_{'_'.join([str(ph) for ph in ph_list[start_idx:end_idx+1]])}_N_input_{sh_order_input}_{suffix}")
     save_sparse_matrix(filename = file,matrix=s_subbands)
     print(f"Saved to {file}")
