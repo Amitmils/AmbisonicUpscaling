@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 class optimizer:
-    def __init__(self, Y_p, alpha, dim_reduction=True,constraint_tol=0, method='SQP'):
+    def __init__(self, Y_p, alpha, dim_reduction=True,constraint_tol=0, method='GD_lagrange_multi'):
         self.Y_p = Y_p
         self.alpha = alpha
         self.dim_reduction = dim_reduction
@@ -35,9 +35,6 @@ class optimizer:
         
         lagrange_multi_k = np.zeros((self.Y_p.shape[0]**2,1))
         Omega_k = np.random.randn(Omega_k0.shape[0],Omega_k0.shape[1])
-        general_loss = list()
-        obj_loss = list()
-        constraint_loss = list()
         for iter in range(int(1e5)):
             grad_omega = grad_omega_k(Omega_k,lagrange_multi_k)
             grad_lagrange_multi = grad_lagrange_multi_k(Omega_k)
@@ -54,19 +51,6 @@ class optimizer:
                         lagrange_multi_k[i] += ro * (grad_lagrange_multi[i] + self.constraint_tol)
                     else:
                         lagrange_multi_k[i] = max(0, lagrange_multi_k[i])
-        #     general_loss.append(self.objective(Omega_k) + np.sum(lagrange_multi_k * self.constraint(Omega_k)))
-        #     obj_loss.append(self.objective(Omega_k))
-        #     constraint_loss.append(np.sum(lagrange_multi_k * self.constraint(Omega_k)))
-        # plt.figure()
-        # plt.plot(general_loss,label='General Loss')
-        # plt.title('General Loss')
-        # plt.figure()
-        # plt.plot(obj_loss,label='Objective Loss')
-        # plt.title('Objective Loss')
-        # plt.figure()
-        # plt.plot(constraint_loss,label='Constraint Loss')
-        # plt.title('Constraint Loss')
-        # plt.show()
         self.constraint_loss = self.constraint(Omega_k) #not really a loss
         self.objective_loss = self.objective(Omega_k)
         return Omega_k
