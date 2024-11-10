@@ -13,11 +13,11 @@ if __name__ == "__main__":
     method = "GD_lagrange_multi"  # 'GD_lagrange_multi' 'SQP' 'SLS'
     constraint_tol = 0  # only for GD_lagrange_multi
 
-    grid_type = "manual"  # lebedev or manual
+    grid_type = "lebedev"  # lebedev or manual
     multi_processing = True
 
     tau = 1024  # number of samples
-    num_bins = 45
+    num_bins = 1
     SH_type = "real"
 
     suffix = "no_normalization"
@@ -33,7 +33,7 @@ if __name__ == "__main__":
         r"data/sound_files/female_speech.wav",
     ]
     th_list = [90, 90]  # degrees
-    ph_list = [45, 0]  # degrees
+    ph_list = [45, -45]  # degrees
     anm_t_list = list()
     s_list = list()
     fs_list = list()
@@ -162,7 +162,7 @@ if __name__ == "__main__":
 
                 # Call your optimization function
                 s_subbands[window, band, :, :], Dk = opt.optimize(
-                    Bk, mask, D_prior=None
+                    Bk[None,None,...], mask[None,None,...], D_prior=None
                 )
 
                 inner_bar.update(1)  # Update inner progress bar
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     save_sparse_matrix(filename=file, matrix=s_subbands)
     print(f"Saved to {file}")
 
-    if False:
+    if True:
         # Show results
         s_windowed = np.sum(s_subbands, axis=1)
         ideal_constraint_loss = list()  # when we have 1 activated source

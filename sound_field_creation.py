@@ -33,8 +33,8 @@ class sound_field:
         self.anm_t_list = list()
         self.y_list = list()
         self.sources_coords = list()
+        self.input_order = order
         max_length = 0
-
         for curr_sig in signals:
             self.sources_coords.append(
                 (math.degrees(curr_sig.th), math.degrees(curr_sig.ph))
@@ -162,6 +162,16 @@ class sound_field:
         else:
             raise ValueError(f"Unknown grid type {grid_type}")
 
+    def get_sparse_dict_v2(self, opt: optimizer, mask=None, multi_processing: bool = True):
+        Bk_matrix = self.windowed_anm_t.transpose(0,1,3,2)
+        if mask is not None:
+            mask_matrix = mask[None,None,...]
+        else:
+            mask_matrix = None
+        self.sparse_dict_subbands,Dk = opt.optimize(Bk_matrix, mask_matrix, None)
+        self.s_windowed = np.sum(self.sparse_dict_subbands, axis=1)
+        self.s_dict = self.s_windowed.transpose(1,0,2).reshape(self.num_grid_points, self.window_length * self.num_windows)
+
     def get_sparse_dict(self, opt: optimizer, mask=None, multi_processing: bool = True):
         spare_dict_subbands = np.zeros(
             (self.num_windows, self.num_bins, self.num_grid_points, self.window_length)
@@ -169,7 +179,7 @@ class sound_field:
         if multi_processing:
             print("Multi Processing")
             args = [
-                (self.windowed_anm_t[window, band, :, :].T, mask, None)
+                (self.windowed_anm_t[window, band, :, :].T[None,None,...], mask, None)
                 for window in range(self.num_windows)
                 for band in range(self.num_bins)
             ]
@@ -202,4 +212,14 @@ class sound_field:
                 inner_bar.close()  # Close the inner progress bar after finishing the inner loop
                 outer_bar.update(1)  # Update outer progress bar
 
-        return spare_dict_subbands
+        self.sparse_dict_subbands = spare_dict_subbands
+        self.s_windowed = np.sum(self.sparse_dict_subbands, axis=1)
+        self.s_dict = self.s_windowed.transpose(1,0,2).reshape(self.num_grid_points, self.window_length * self.num_windows)
+
+    def plot_sparse_dict(self,sample_idx: int):
+        utils.plot_on_2D(
+            azi=self.P_ph,
+            zen=self.P_th,
+            values=self.s_dict[:, sample_idx],
+            title=f"Encoded Signal N={self.input_order} t={sample_idx}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
+        )
