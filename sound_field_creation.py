@@ -17,8 +17,9 @@ POINTS_162 = "162_points"
 
 
 class sound_field:
-    def __init__(self) -> None:
-        pass
+    def __init__(self,device: torch.device = torch.device("cpu"),
+) -> None:
+        self.device = device
 
     def create(
         self,
@@ -28,10 +29,7 @@ class sound_field:
         SH_type: str = "real",
         grid_type: str = LEBEDEV,
         debug=False,
-        device: torch.device = torch.device("cpu"),
     ) -> None:
-        torch.set_default_device(device)
-
         signals, self.sr = self._ensure_same_sr(signals)
         self.anm_t_list = []
         self.y_list = []
@@ -55,7 +53,7 @@ class sound_field:
             self.y_list.append(y)
 
         # combine all signals
-        total_anm_t = torch.zeros((max_length, self.anm_t_list[0].shape[1]))
+        total_anm_t = torch.zeros((max_length, self.anm_t_list[0].shape[1])).to(self.device)
         for i in range(len(self.anm_t_list)):
             total_anm_t += torch.nn.functional.pad(
                 self.anm_t_list[i],
@@ -63,7 +61,7 @@ class sound_field:
             )
 
         self._create_grid(grid_type)
-        Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type)
+        Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type).to(self.device)
         
         if debug:
             # project first time sample on 192 points
@@ -114,7 +112,7 @@ class sound_field:
                 anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T)
 
             # [pass band k,t,SH_coeff]
-            self.anm_t_subbands = anm_t_subbands
+            self.anm_t_subbands = anm_t_subbands.to(self.device)
         return self.anm_t_subbands
 
     def divide_to_time_windows(
@@ -168,13 +166,26 @@ class sound_field:
         self.P_th = torch.tensor(self.P_th)
 
     def get_sparse_dict_v2(self, opt: optimizer, mask=None, multi_processing: bool = True):
+        if hasattr(self, "sparse_dict_subbands"):
+            try:
+                del self.sparse_dict_subbands
+            except:
+                pass
+            try:
+                del self.s_windowed
+            except:
+                pass
+            try:
+                del self.s_dict
+            except:
+                pass
         Bk_matrix = self.windowed_anm_t.permute(0,1,3,2) #turn to (window,band,SH_coeff,time)
         if mask is not None:
             mask_matrix = mask[None,None,...]
         else:
             mask_matrix = None
         self.sparse_dict_subbands,Dk = opt.optimize(Bk_matrix, mask_matrix, None)
-        self.s_windowed = torch.sum(self.sparse_dict_subbands, axis=1)
+        self.s_windowed = torch.sum(torch.tensor(self.sparse_dict_subbands), axis=1)
         self.s_dict = self.s_windowed.permute(1,0,2).reshape(self.num_grid_points, self.window_length * self.num_windows)
 
     def get_sparse_dict(self, opt: optimizer, mask=None, multi_processing: bool = True):

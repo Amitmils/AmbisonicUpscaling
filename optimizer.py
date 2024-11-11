@@ -13,6 +13,7 @@ class optimizer:
         dim_reduction=True,
         constraint_tol=0,
         method="GD_lagrange_multi",
+        device = 'cpu',
     ):
         self.Y_p = Y_p
         self.num_SH_coeff = Y_p.shape[0]
@@ -21,6 +22,7 @@ class optimizer:
         self.dim_reduction = dim_reduction
         self.method = method
         self.constraint_tol = constraint_tol
+        self.device = device
 
     def objective(self, Omega_k):
         Omega_k = Omega_k.reshape(self.Omega_k0.shape)
@@ -74,10 +76,10 @@ class optimizer:
         # Omega_k0 is (window,bin,*,**)
         lagrange_multi_k = torch.zeros(
             (self.num_windows, self.num_bins, self.num_SH_coeff**2, 1)
-        )
-        Omega_k = torch.randn(*Omega_k0.shape)
-        for iter in tqdm(range(int(1e5))):
-            non_zero_indices_in_grid = torch.nonzero(self.mask[0,0,:])
+        ).to(self.device)
+        Omega_k = torch.randn(*Omega_k0.shape).to(self.device)
+        for iter in tqdm(range(int(5))):
+            non_zero_indices_in_grid = torch.nonzero(self.mask[0,0,:]).to(self.device)
             reduced_Yp = self.Y_p[:, :, :, non_zero_indices_in_grid].reshape(
                 self.num_windows, self.num_bins, self.num_SH_coeff, -1
             )  # TODO Currently assumes mask doesnt change over time
@@ -108,7 +110,7 @@ class optimizer:
         print("1")
         Dk = np.matmul(
             Omega_k_opt,
-            np.linalg.pinv(torch.tensor(np.matmul(self.Uk, self.Lambda_k))).numpy(),
+            torch.linalg.pinv(torch.tensor(np.matmul(self.Uk.cpu(), self.Lambda_k.cpu())).cpu()).numpy(),
         )
         if D_prior is not None:
             Dk = self.alpha * Dk + (1 - self.alpha) * D_prior
@@ -172,11 +174,11 @@ class optimizer:
 
         print("Finished Optimization...Unmixing")
         Sk = np.zeros(
-            (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),
+            (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),dtype=np.float32
         )  # (num windows,num bins,SH Coeff, Window length)
         print("0")
         Sk_temp, Dk = self.unmix_and_smooth(Bk.cpu().numpy(), Omega_k_opt.cpu().numpy(), D_prior)
         print("Finished Unmixing...")
         non_zero_indices_in_grid = torch.nonzero(mask[0, 0, :]).flatten()
-        Sk[:, :, non_zero_indices_in_grid, :] = Sk_temp.cpu()
+        Sk[:, :, non_zero_indices_in_grid, :] = Sk_temp
         return Sk, Dk
