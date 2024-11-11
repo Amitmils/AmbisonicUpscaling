@@ -1,7 +1,7 @@
 import spaudiopy as spa
-import numpy as np
 import soundfile as sf
 import os
+import numpy as np
 from py_bank.filterbanks import EqualRectangularBandwidth
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -9,7 +9,6 @@ from scipy.spatial import ConvexHull
 import torchaudio
 import torch
 from signal_info import signal_info
-
 
 def save_sparse_matrix(matrix, filename):
     """
@@ -36,12 +35,12 @@ def save_sparse_matrix(matrix, filename):
 def load_sparse_matrix(filename):
     # Load the data from the .npz file
     data = np.load(filename + ".npz")
-    indices = data["indices"]
-    values = data["values"]
-    shape = tuple(data["shape"])
+    indices = torch.tensor(data["indices"])
+    values = torch.tensor(data["values"])
+    shape = tuple(torch.tenosr(data["shape"]))
 
     # Reconstruct the sparse array
-    sparse_array = np.zeros(shape, dtype=values.dtype)
+    sparse_array = torch.zeros(shape, dtype=values.dtype)
     sparse_array[tuple(indices.T)] = values
 
     return sparse_array
@@ -62,10 +61,10 @@ def cart2sph(cart_coords):
     x = cart_coords[:, 0]
     y = cart_coords[:, 1]
     z = cart_coords[:, 2]
-    r = np.sqrt(x**2 + y**2 + z**2)
-    theta = np.arccos(z / r)
-    phi = np.arctan2(y, x)
-    return np.column_stack((r, theta, phi))
+    r = torch.sqrt(x**2 + y**2 + z**2)
+    theta = torch.arccos(z / r)
+    phi = torch.arctan2(y, x)
+    return torch.stack((r, theta, phi),dim=1)
 
 
 def sph2cart(sph_coords):
@@ -81,18 +80,18 @@ def sph2cart(sph_coords):
     Returns:
     numpy.ndarray: Array of Cartesian coordinates (x, y, z).
     """
-    if not (isinstance(sph_coords, np.ndarray)):
-        sph_coords = np.stack(sph_coords).T
+    if not (isinstance(sph_coords, torch.tensor)):
+        sph_coords = torch.stack(sph_coords).T
     if sph_coords.shape[1] == 3:
         r = sph_coords[:, 0]
     else:
-        r = np.ones(sph_coords.shape[0])
+        r = torch.ones(sph_coords.shape[0])
     th = sph_coords[:, -2]
     phi = sph_coords[:, -1]
-    x = r * np.sin(th) * np.cos(phi)
-    y = r * np.sin(th) * np.sin(phi)
-    z = r * np.cos(th)
-    return np.column_stack((x, y, z))
+    x = r * torch.sin(th) * torch.cos(phi)
+    y = r * torch.sin(th) * torch.sin(phi)
+    z = r * torch.cos(th)
+    return torch.stack((x, y, z),dim=1)
 
 
 def create_sh_matrix(N, azi, zen, type="real"):
@@ -110,7 +109,7 @@ def create_sh_matrix(N, azi, zen, type="real"):
     """
     azi = azi.reshape(-1)
     zen = zen.reshape(-1)
-    return spa.sph.sh_matrix(N_sph=N, azi=azi, zen=zen, sh_type=type).transpose()
+    return torch.tensor(spa.sph.sh_matrix(N_sph=N, azi=azi.cpu().numpy(), zen=zen.cpu().numpy(), sh_type=type).transpose()).to(torch.float32)
 
 
 def fft_anm_t(anm_t, fs):
@@ -124,16 +123,16 @@ def fft_anm_t(anm_t, fs):
     Returns:
     numpy.ndarray: Frequency-domain spherical harmonic coefficients.
     """
-    NFFT = 2 ** np.ceil(np.log2(anm_t.shape[0])).astype(
+    NFFT = 2 ** torch.ceil(torch.log2(anm_t.shape[0])).astype(
         int
     )  # Equivalent of nextpow2 in MATLAB
-    anm_f = np.fft.fft(anm_t, NFFT, axis=0)  # Perform FFT along the rows (axis=0)
+    anm_f = torch.fft.fft(anm_t, n=NFFT, dim=0)  # Perform FFT along the rows (axis=0)
 
     # Remove negative frequencies
     anm_f = anm_f[: NFFT // 2 + 1, :]  # Keep only the positive frequencies
 
     # Vector of frequencies
-    fVec = np.fft.fftfreq(NFFT, 1 / fs)  # Create frequency vector
+    fVec = torch.fft.fftfreq(NFFT, 1 / fs)  # Create frequency vector
     fVec_pos = fVec[: NFFT // 2 + 1]  # Keep only positive frequencies
     return anm_f, fVec_pos
 
@@ -153,8 +152,8 @@ def _resample(signal, org_sr, new_sr):
     if org_sr == new_sr:
         return signal
     else:
-        resampler = torchaudio.transforms.Resample(orig_freq=org_sr, new_freq=new_sr)
-        resampled_signal = resampler(torch.tensor(signal).unsqueeze(0)).squeeze()
+        resampler = torchaudio.transforms.Resample(orig_freq=org_sr, new_freq=new_sr).to(signal.device)
+        resampled_signal = resampler(signal.unsqueeze(0)).squeeze()
         if isinstance(signal, np.ndarray):
             return resampled_signal.numpy().squeeze()
         elif isinstance(signal, torch.Tensor):
@@ -174,36 +173,18 @@ def divide_anm_t_to_sub_bands(anm_t, fs, num_bins, low_filter_center_freq, DS=2)
     erb_bank = EqualRectangularBandwidth(
         num_samples, fs, num_bins, low_filter_center_freq, high_filter_center_freq
     )
-    anm_t_subbands = np.zeros(
+    anm_t_subbands = torch.zeros(
         (num_bins + 2, num_samples, num_coeff)
     )  # num_bins + low and high for perfect reconstruction  | filter_length = num of SH coeff | num_samples = t
     for coeff in range(num_coeff):
-        erb_bank.generate_subbands(anm_t[:, coeff])
-        anm_t_subbands[:, :, coeff] = erb_bank.subbands.T
+        erb_bank.generate_subbands(anm_t[:, coeff].numpy())
+        anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T)
 
     # [pass band k,t,SH_coeff]
     return anm_t_subbands
 
-
-def divide_anm_t_to_time_windows(anm_t, window_length):
-
-    # signal is size [band pass k ,time samples,(ambi Order+1)^2]
-    num_samples = anm_t.shape[1]
-    anm_t_padded = np.pad(
-        anm_t,
-        ((0, 0), (0, window_length - num_samples % window_length), (0, 0)),
-        mode="constant",
-        constant_values=0,
-    )
-    windowed_anm_t = np.array_split(
-        anm_t_padded, anm_t_padded.shape[1] // window_length, axis=1
-    )
-    windowed_anm_t = np.stack(windowed_anm_t)
-    return windowed_anm_t
-
-
 def encode_signal(
-    signal,
+    signal : signal_info,
     sh_order,
     ph=None,
     th=None,
@@ -212,25 +193,22 @@ def encode_signal(
     normalize_signal=True,
 ):
 
-    if isinstance(signal, str):
-        s, fs = torchaudio.load(signal)
-        s = s.squeeze().numpy()
-    elif isinstance(signal, signal_info):
+    try:
         s = signal.signal
         fs = signal.sr
         th = signal.th
         ph = signal.ph
-
+    except:
+        raise f"signal must be of type signal_info"
     if normalize_signal:
-        s = s / np.sqrt(np.mean(s**2))
-    y = spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type)
+        s = s / torch.sqrt(torch.mean(s**2))
+    y = torch.tensor(spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type)).to(signal.device).to(torch.float32)
 
     if plot:
-        debug = np.ones((1, 16))
-        debug = debug * (4 * np.pi) / (debug.shape[1] + 1) ** 2
+        debug = torch.ones((1, 16))
+        debug = debug * (4 * torch.pi) / (debug.shape[1] + 1) ** 2
         spa.plot.sh_coeffs(y, cbar=False)  # Mirrored when use complex (Why?)
-    encoded_signal = s.reshape(-1, 1) @ y.reshape(1, -1)
-    # print("Energy of Encoded Signal:", np.mean(encoded_signal*np.conj(encoded_signal)))
+    encoded_signal = torch.matmul(s.reshape(-1, 1), y.reshape(1, -1))
     return encoded_signal, s, fs, y
 
 
@@ -242,8 +220,8 @@ def icosahedron_vertices():
     Returns:
     numpy.ndarray: Array of shape (12, 3) containing the Cartesian coordinates of the vertices.
     """
-    phi = (1 + np.sqrt(5)) / 2  # golden ratio
-    vertices = np.array(
+    phi = (1 + torch.sqrt(5)) / 2  # golden ratio
+    vertices = torch.array(
         [
             [-1, phi, 0],
             [1, phi, 0],
@@ -260,7 +238,7 @@ def icosahedron_vertices():
         ]
     )
     # Normalize vertices to lie on the sphere
-    vertices /= np.linalg.norm(vertices, axis=1)[:, None]
+    vertices /= torch.linalg.norm(vertices, dim=1)[:, None]
     return vertices
 
 
@@ -287,7 +265,7 @@ def subdivide(vertices, faces, n):
 
     def add_vertex(v):
         # Normalize the vertex to project onto the sphere
-        v = v / np.linalg.norm(v)
+        v = v / torch.linalg.norm(v)
         new_vertices.append(v)
         return len(new_vertices) - 1
 
@@ -315,7 +293,7 @@ def subdivide(vertices, faces, n):
         new_faces.append([v2, c, b])
         new_faces.append([a, b, c])
 
-    return np.array(new_vertices), np.array(new_faces)
+    return torch.tensor(new_vertices), torch.tensor(new_faces)
 
 
 # Generate P points on the sphere
@@ -338,7 +316,7 @@ def generate_sphere_points(P, plot):
     # Number of vertices after subdivision ~ (n_subdivisions^2 * initial_faces)
     n_faces = len(faces)
     n_subdivisions = round(
-        np.sqrt(P / n_faces) + 0.5
+        torch.sqrt(P / n_faces) + 0.5
     )  # num points grows as ~(n_subdivisions ** 2) per face (Asymptotic growth)
 
     # Subdivide the icosahedron
@@ -353,7 +331,7 @@ def generate_sphere_points(P, plot):
         #     ax.add_collection3d(Poly3DCollection([triangle], color='cyan', edgecolor='k', linewidths=1, alpha=0.7))
         # plt.show()
 
-    points = np.array(vertices[:P])
+    points = torch.tensor(vertices[:P])
     if plot:
         spa.plot.hull(spa.decoder.get_hull(*points.T))
         plt.title(f"{len(points)} Points on Sphere")
@@ -379,7 +357,7 @@ def plot_on_sphere(points, values, title=""):
         cart_points[:, 0],
         cart_points[:, 1],
         cart_points[:, 2],
-        c=np.real(values),
+        c=torch.real(values),
         cmap="viridis",
         s=50,
     )  # s is point size
@@ -404,11 +382,11 @@ def create_sin_wave(freq, duration=10.0, fs=48000, output_dir="data/sound_files"
     None
     """
     # Time array
-    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
+    t = torch.linspace(0, duration, steps=int(fs * duration), endpoint=False)
 
     # Generate the sine wave
-    sine_wave = 1 + 0.5 * np.sin(
-        2 * np.pi * freq * t
+    sine_wave = 1 + 0.5 * torch.sin(
+        2 * torch.pi * freq * t
     )  # Amplitude of 0.5 to avoid clipping
     # Save as a WAV file
     sf.write(os.path.join(output_dir, f"{freq}Hz_sine_wave.wav"), sine_wave, fs)
@@ -432,22 +410,22 @@ def plot_on_2D(azi, zen, values, title="", normalize=True):
     ax = fig.add_subplot(111, projection="mollweide")
     azimuths_mollweide = azi
     zeniths_mollweide = (
-        np.pi / 2 - zen
+        torch.pi / 2 - zen
     )  # Mollweide projection takes latitude, so shift by pi/2
     # Plot points with color representing the value at each point
 
     sc = ax.scatter(
-        azimuths_mollweide, zeniths_mollweide, c=np.real(values), cmap="viridis", s=50
+        azimuths_mollweide.cpu(), zeniths_mollweide.cpu(), c=torch.real(values).cpu(), cmap="viridis", s=50
     )
     plt.title(title, pad=80)
     plt.colorbar(sc, label="Value")
 
     # Modify y-axis tick labels to range from 0 to 180 degrees, with steps of 15
-    yticks_degrees = np.arange(0, 181, 15)  # From 0 to 180, with steps of 15 degrees
-    yticks_radians = np.radians(
+    yticks_degrees = torch.arange(0, 181, 15)  # From 0 to 180, with steps of 15 degrees
+    yticks_radians = torch.deg2rad(
         90 - yticks_degrees
     )  # Convert to radians and shift by 90 to match Mollweide's latitude format
 
     # Apply ticks and labels
-    ax.set_yticks(yticks_radians)
-    ax.set_yticklabels(yticks_degrees)
+    ax.set_yticks(yticks_radians.cpu().numpy())
+    ax.set_yticklabels(yticks_degrees.cpu().numpy())
