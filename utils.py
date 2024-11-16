@@ -220,8 +220,8 @@ def icosahedron_vertices():
     Returns:
     numpy.ndarray: Array of shape (12, 3) containing the Cartesian coordinates of the vertices.
     """
-    phi = (1 + torch.sqrt(5)) / 2  # golden ratio
-    vertices = torch.array(
+    phi = (1 + np.sqrt(5)) / 2  # golden ratio
+    vertices = np.array(
         [
             [-1, phi, 0],
             [1, phi, 0],
@@ -238,7 +238,7 @@ def icosahedron_vertices():
         ]
     )
     # Normalize vertices to lie on the sphere
-    vertices /= torch.linalg.norm(vertices, dim=1)[:, None]
+    vertices /= np.linalg.norm(vertices, axis=1)[:, None]
     return vertices
 
 
@@ -265,7 +265,7 @@ def subdivide(vertices, faces, n):
 
     def add_vertex(v):
         # Normalize the vertex to project onto the sphere
-        v = v / torch.linalg.norm(v)
+        v = v / np.linalg.norm(v)
         new_vertices.append(v)
         return len(new_vertices) - 1
 
@@ -293,7 +293,7 @@ def subdivide(vertices, faces, n):
         new_faces.append([v2, c, b])
         new_faces.append([a, b, c])
 
-    return torch.tensor(new_vertices), torch.tensor(new_faces)
+    return np.stack(new_vertices), np.stack(new_faces)
 
 
 # Generate P points on the sphere
@@ -316,7 +316,7 @@ def generate_sphere_points(P, plot):
     # Number of vertices after subdivision ~ (n_subdivisions^2 * initial_faces)
     n_faces = len(faces)
     n_subdivisions = round(
-        torch.sqrt(P / n_faces) + 0.5
+        np.sqrt(P / n_faces) + 0.5
     )  # num points grows as ~(n_subdivisions ** 2) per face (Asymptotic growth)
 
     # Subdivide the icosahedron

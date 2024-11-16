@@ -44,7 +44,7 @@ class optimizer:
             self.objective, Omega_k0.flatten(), constraints=con, method="SLSQP"
         )
 
-    def GD_lagrange_multi(self, Omega_k0, mu=1e-3, ro=1e-3):
+    def GD_lagrange_multi(self, Omega_k0,iter = 1e5, mu=1e-3, ro=1e-3):
         def grad_omega_k(Omega_k, lagrange_multi_k):
             Omega_k = Omega_k.reshape(self.Omega_k0.shape)
             grad = Omega_k / torch.sqrt(torch.sum(Omega_k**2, dim=-1))[..., None]
@@ -78,7 +78,7 @@ class optimizer:
             (self.num_windows, self.num_bins, self.num_SH_coeff**2, 1)
         ).to(self.device)
         Omega_k = torch.randn(*Omega_k0.shape).to(self.device)
-        for iter in tqdm(range(int(5))):
+        for iter in tqdm(range(int(iter))):
             non_zero_indices_in_grid = torch.nonzero(self.mask[0,0,:]).to(self.device)
             reduced_Yp = self.Y_p[:, :, :, non_zero_indices_in_grid].reshape(
                 self.num_windows, self.num_bins, self.num_SH_coeff, -1
@@ -108,14 +108,14 @@ class optimizer:
 
     def unmix_and_smooth(self, Bk, Omega_k_opt, D_prior):
         print("1")
-        Dk = np.matmul(
+        Dk = torch.matmul(
             Omega_k_opt,
-            torch.linalg.pinv(torch.tensor(np.matmul(self.Uk.cpu(), self.Lambda_k.cpu())).cpu()).numpy(),
+            torch.linalg.pinv(torch.matmul(self.Uk, self.Lambda_k)),
         )
         if D_prior is not None:
             Dk = self.alpha * Dk + (1 - self.alpha) * D_prior
         print("2")
-        Sk = np.matmul(Dk, Bk)
+        Sk = torch.matmul(Dk, Bk)
         print("3")
         return Sk, Dk
 
@@ -124,7 +124,7 @@ class optimizer:
         Omega_opt = torch.linalg.pinv(self.Y_p[:, self.mask]) @ self.Uk @ self.Lambda_k
         return Omega_opt
 
-    def optimize(self, Bk, mask=None, D_prior=None):
+    def optimize(self, Bk,itr = 1e5, mask=None, D_prior=None,cheat = False):
         if isinstance(Bk, tuple):
             # cheap hack for MP
             tmp = Bk
@@ -152,7 +152,7 @@ class optimizer:
         )
         self.mask = mask
         self.Uk, Lk, Vkt = torch.linalg.svd(Bk, full_matrices=False)
-        self.Lambda_k = torch.diag_embed(Lk)
+        self.Lambda_k = torch.diag_embed(Lk).to(self.device)
         self.Omega_k0 = torch.zeros(
             (
                 self.num_windows,
@@ -167,18 +167,25 @@ class optimizer:
             Omega_k_opt = res.x.reshape(self.Omega_k0.shape)
 
         if self.method == "GD_lagrange_multi":
-            Omega_k_opt = self.GD_lagrange_multi(self.Omega_k0)
+            Omega_k_opt = self.GD_lagrange_multi(self.Omega_k0,iter=itr)
 
         if self.method == "SLS":
             Omega_k_opt = self.SLS()
 
-        print("Finished Optimization...Unmixing")
-        Sk = np.zeros(
-            (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),dtype=np.float32
-        )  # (num windows,num bins,SH Coeff, Window length)
-        print("0")
-        Sk_temp, Dk = self.unmix_and_smooth(Bk.cpu().numpy(), Omega_k_opt.cpu().numpy(), D_prior)
-        print("Finished Unmixing...")
-        non_zero_indices_in_grid = torch.nonzero(mask[0, 0, :]).flatten()
-        Sk[:, :, non_zero_indices_in_grid, :] = Sk_temp
-        return Sk, Dk
+        if cheat:
+            print("Finished Optimization...Stopping")
+            return Bk,Omega_k_opt
+        else:
+            print("Finished Optimization...Unmixing")
+            Sk = torch.zeros(
+                (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),dtype=torch.float32,device=self.device
+            )  # (num windows,num bins,SH Coeff, Window length)
+            print("0")
+            Sk_temp, Dk = self.unmix_and_smooth(Bk, Omega_k_opt, D_prior)
+            print("Finished Unmixing...")
+            if mask is not None:
+                non_zero_indices_in_grid = torch.nonzero(mask[0, 0, :]).flatten()
+                Sk[:, :, non_zero_indices_in_grid, :] = Sk_temp
+            else:
+                Sk = Sk_temp
+            return Sk, Dk
