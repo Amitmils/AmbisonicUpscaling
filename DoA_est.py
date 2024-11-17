@@ -13,6 +13,12 @@ class DoA_candidate:
     count: int = 0
     band: int = -1
     window: int = -1
+    
+    def __eq__(self, other: object) -> bool:
+        if (self.zen == other.zen) and (self.azi == other.azi):
+            return True
+        else:
+            return False
 
 
 class DoA_via_bands:
@@ -27,7 +33,6 @@ class DoA_via_bands:
         normalized_abs_sound_field = abs_sound_field / normalization_per_t.unsqueeze(-2)
         return normalized_abs_sound_field
 
-
     def _get_window_candidates(self, TH=0.35):
         ids = torch.nonzero(self.normalized_abs_sound_field > TH)
         window_dir_candidates = dict()
@@ -36,7 +41,7 @@ class DoA_via_bands:
         )
 
         for win in range(self.sound_field.num_windows):
-            window_dir_candidates[win] = torch.zeros((1, 3))
+            window_dir_candidates[win] = list()
             curr_win_id = ids[torch.nonzero(ids[:, 0] == win).flatten(), 1:]
             for bin in set(curr_win_id[:, 0].cpu().numpy()):
                 curr_win_bin_candidates = (
@@ -53,12 +58,14 @@ class DoA_via_bands:
                     ]
                 )
                 counter = c.most_common()
-                window_dir_candidates[win] = [
-                    DoA_candidate(
-                        candidate[0][0], candidate[0][1], candidate[1], bin, win
-                    )
-                    for candidate in counter
-                ]
+                window_dir_candidates[win].extend(
+                    [
+                        DoA_candidate(
+                            candidate[0][0], candidate[0][1], candidate[1], bin, win
+                        )
+                        for candidate in counter
+                    ]
+                )
         return window_dir_candidates
 
     def plot_window_candidates(self, window_candidates: List[DoA_candidate]):
