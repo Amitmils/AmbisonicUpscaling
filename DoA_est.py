@@ -4,9 +4,10 @@ import dataclasses
 from typing import List, Union
 from collections import Counter
 import numpy as np
+import utils
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True, eq=True)
 class DoA_candidate:
     zen: int
     azi: int
@@ -20,14 +21,20 @@ class DoA_candidate:
         else:
             return False
 
+    def __hash__(self) -> int:
+        # Custom hash: Only hash based on zen and azi
+        return hash((self.zen, self.azi))
+
 
 class DoA_via_bands:
-    def __init__(self, sound_field, device) -> None:
+    def __init__(self, sound_field, device , window=None) -> None:
         self.sound_field = sound_field
         self.device = device
-        self.normalized_abs_sound_field = self._get_normalized_sound_field()
+        self.normalized_abs_sound_field = self._get_normalized_sound_field(window)
 
-    def _get_normalized_sound_field(self):
+    def _get_normalized_sound_field(self,window=None):
+        if window is None:
+            window = torch.arange(self.sound_field.num_windows)
         abs_sound_field = torch.abs(self.sound_field.sparse_dict_subbands)
         normalization_per_t = torch.sum(abs_sound_field, dim=2)  # or max
         normalized_abs_sound_field = abs_sound_field / normalization_per_t.unsqueeze(-2)
@@ -66,11 +73,36 @@ class DoA_via_bands:
                         for candidate in counter
                     ]
                 )
+            window_dir_candidates[win] = Counter(window_dir_candidates[win]).most_common()
         return window_dir_candidates
 
-    def plot_window_candidates(self, window_candidates: List[DoA_candidate]):
-        plt.imshow(self.normalized_abs_sound_field[0].cpu().numpy())
-        plt.show()
+    def plot_window_candidates(self, window_candidates: List[DoA_candidate],window : int = None):
+        def plot():
+            x,y,c = list(),list(),list()
+            for candidate,count in window_candidates[window]:
+                x.append(candidate.zen)
+                y.append(candidate.azi)
+                c.append(count)
+            plt.figure()
+            plt.title(f"DoA candidates for window {window}")
+            plt.xlim(-180,180)
+            plt.ylim(0,180)
+            plt.scatter(x,y,c=c,cmap='viridis')
+            plt.colorbar()
+        def plot_v2():
+            x,y,c = list(),list(),list()
+            for candidate,count in window_candidates[window]:
+                x.append(candidate.zen * torch.pi/180)
+                y.append(candidate.azi * torch.pi/180)
+                c.append(1)
+            utils.plot_on_2D(azi=torch.tensor(y),zen=torch.tensor(x),values=torch.tensor(c),title=f"DoA candidates for window {window}")
+
+        if window is not None:
+            plot_v2()
+        else:
+            for window in range(len(window_candidates)):
+                plot_v2()
+
 
     def get_DoA(self, TH=0.35):
         window_candidates = self._get_window_candidates()

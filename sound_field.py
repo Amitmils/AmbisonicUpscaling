@@ -18,7 +18,7 @@ LEBEDEV = "lebedev"
 POINTS_162 = "162_points"
 
 
-class sound_field:
+class SoundField:
     def __init__(self, device: torch.device = torch.device("cpu")) -> None:
         self.device = device
 
@@ -170,8 +170,8 @@ class sound_field:
         if grid_type == LEBEDEV:
             self.num_grid_points = 2702  # P
             lebedev = scipy.io.loadmat("Lebvedev2702.mat")
-            self.P_th = lebedev["th"].reshape(-1)  # rad
-            self.P_ph = lebedev["ph"].reshape(-1)  # rad
+            self.P_th = torch.tensor(lebedev["th"].reshape(-1))  # rad
+            self.P_ph = torch.tensor(lebedev["ph"].reshape(-1))  # rad
             self.P_ph = (self.P_ph + torch.pi) % (
                 2 * torch.pi
             ) - torch.pi  # wrap angles to [-pi,pi]
