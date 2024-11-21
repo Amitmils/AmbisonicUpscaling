@@ -54,9 +54,7 @@ class SoundField:
             self.y_list.append(y)
 
         # combine all signals
-        total_anm_t = torch.zeros((max_length, self.anm_t_list[0].shape[1])).to(
-            self.device
-        )
+        total_anm_t = torch.zeros((max_length, self.anm_t_list[0].shape[1]))
         for i in range(len(self.anm_t_list)):
             total_anm_t += torch.nn.functional.pad(
                 self.anm_t_list[i],
@@ -66,7 +64,7 @@ class SoundField:
         self._create_grid(grid_type)
         Y_p = utils.create_sh_matrix(
             order, zen=self.P_th, azi=self.P_ph, type=SH_type
-        ).to(self.device)
+        )
 
         if debug:
             # project first time sample on 192 points
@@ -126,7 +124,7 @@ class SoundField:
                 anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T)
 
             # [pass band k,t,SH_coeff]
-            self.anm_t_subbands = anm_t_subbands.to(self.device)
+            self.anm_t_subbands = anm_t_subbands
         return self.anm_t_subbands
 
     def divide_to_time_windows(
@@ -189,20 +187,8 @@ class SoundField:
         mask=None,
         iter=1e5,
         multi_processing: bool = True,
+        save = False,
     ):
-        if hasattr(self, "sparse_dict_subbands"):
-            try:
-                del self.sparse_dict_subbands
-            except:
-                pass
-            try:
-                del self.s_windowed
-            except:
-                pass
-            try:
-                del self.s_dict
-            except:
-                pass
         Bk_matrix = self.windowed_anm_t.permute(
             0, 1, 3, 2
         )  # turn to (window,band,SH_coeff,time)
@@ -217,6 +203,10 @@ class SoundField:
         self.s_dict = self.s_windowed.permute(1, 0, 2).reshape(
             self.num_grid_points, self.window_length * self.num_windows
         )
+        if save:
+            self.save_sound_field('data/output')
+        return self.sparse_dict_subbands,self.s_windowed,self.s_dict
+
 
     def get_sparse_dict(self, opt: optimizer, mask=None, multi_processing: bool = True):
         spare_dict_subbands = torch.zeros(

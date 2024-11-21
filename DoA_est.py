@@ -5,6 +5,7 @@ from typing import List, Union
 from collections import Counter
 import numpy as np
 import utils
+import gc
 
 
 @dataclasses.dataclass(frozen=True, eq=True)
@@ -32,13 +33,27 @@ class DoA_via_bands:
         self.device = device
         self.normalized_abs_sound_field = self._get_normalized_sound_field(window)
 
-    def _get_normalized_sound_field(self,window=None):
-        if window is None:
-            window = torch.arange(self.sound_field.num_windows)
-        abs_sound_field = torch.abs(self.sound_field.sparse_dict_subbands)
+    def _get_normalized_sound_field(self, window=None):
+        # Move the tensor to GPU for computation
+        abs_sound_field = torch.abs(self.sound_field.sparse_dict_subbands.to(self.device))
+        
+        # Perform calculations on the GPU
         normalization_per_t = torch.sum(abs_sound_field, dim=2)  # or max
         normalized_abs_sound_field = abs_sound_field / normalization_per_t.unsqueeze(-2)
-        return normalized_abs_sound_field
+        
+        # Move the result back to CPU and clear GPU memory
+        result = normalized_abs_sound_field.cpu()
+        
+        # Clear any unused memory from the GPU cache
+        torch.cuda.empty_cache()
+        
+        # Explicitly delete tensors to free GPU memory
+        del abs_sound_field, normalization_per_t, normalized_abs_sound_field
+        
+        # Run garbage collection to free up memory
+        gc.collect()
+        
+        return result
 
     def _get_window_candidates(self, TH=0.35):
         ids = torch.nonzero(self.normalized_abs_sound_field > TH)

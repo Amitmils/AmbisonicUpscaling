@@ -202,7 +202,7 @@ def encode_signal(
         raise f"signal must be of type signal_info"
     if normalize_signal:
         s = s / torch.sqrt(torch.mean(s**2))
-    y = torch.tensor(spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type)).to(signal.device).to(torch.float32)
+    y = torch.tensor(spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type)).to(torch.float32)
 
     if plot:
         debug = torch.ones((1, 16))
@@ -415,7 +415,7 @@ def plot_on_2D(azi, zen, values, title="", normalize=True):
     # Plot points with color representing the value at each point
 
     sc = ax.scatter(
-        azimuths_mollweide.cpu(), zeniths_mollweide.cpu(), c=torch.real(values).cpu(), cmap="viridis", s=50
+        azimuths_mollweide.cpu(), zeniths_mollweide.cpu(), c=torch.real(values).cpu(), cmap="viridis", s=25
     )
     plt.title(title, pad=80)
     plt.colorbar(sc, label="Value")
