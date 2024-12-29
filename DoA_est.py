@@ -35,25 +35,39 @@ class DoA_via_bands:
 
     def _get_normalized_sound_field(self, window=None):
         # Move the tensor to GPU for computation
-        abs_sound_field = torch.abs(self.sound_field.sparse_dict_subbands.to(self.device))
+        result_list = []
+        for i in range(self.sound_field.num_windows): 
+                print(f"{i+1}/{self.sound_field.num_windows}")
+                # Extract the batch
+                batch = torch.abs(self.sound_field.sparse_dict_subbands)[i].to(self.device)  # Shape: (2702, 1024)
+                
+                # Compute the normalization and normalized result for this batch
+                norms = torch.sum(batch, dim=-2)
+                normalized_batch = batch / norms.unsqueeze(-2)  # Broadcasting division
+                
+                # Move the result back to CPU
+                result_list.append(normalized_batch.cpu())  # Append to the result list
+
+        # After all batches are processed, concatenate them
+        result = torch.stack(result_list, dim=0)  # Final shape will be (N, M, 2702, 1024)
         
-        # Perform calculations on the GPU
-        normalization_per_t = torch.sum(abs_sound_field, dim=2)  # or max
-        normalized_abs_sound_field = abs_sound_field / normalization_per_t.unsqueeze(-2)
-        
-        # Move the result back to CPU and clear GPU memory
-        result = normalized_abs_sound_field.cpu()
-        
-        # Clear any unused memory from the GPU cache
-        torch.cuda.empty_cache()
-        
-        # Explicitly delete tensors to free GPU memory
-        del abs_sound_field, normalization_per_t, normalized_abs_sound_field
-        
-        # Run garbage collection to free up memory
-        gc.collect()
         
         return result
+
+
+    def _get_window_candidates_v2(self, TH=0.35):
+        th_phi = (
+            torch.vstack((self.sound_field.P_th, self.sound_field.P_ph)).T.cpu().numpy()
+        )
+        max_values, max_indices = torch.max(self.normalized_abs_sound_field, dim=-2)
+        window_dir_candidates = dict()
+        for win in range(self.sound_field.num_windows):
+            print(win)
+            candidates_in_win = max_indices[win, max_values[win] > TH] #in bins
+            candidates_in_win = th_phi[candidates_in_win]* 180 / torch.pi #in degrees
+            counter = Counter([tuple(candidate) for candidate in candidates_in_win]).most_common()
+            window_dir_candidates[win] = [DoA_candidate(candidate[0][0], candidate[0][1], candidate[1], -1, win) for candidate in counter]
+        return window_dir_candidates
 
     def _get_window_candidates(self, TH=0.35):
         ids = torch.nonzero(self.normalized_abs_sound_field > TH)
@@ -94,10 +108,10 @@ class DoA_via_bands:
     def plot_window_candidates(self, window_candidates: List[DoA_candidate],window : int = None):
         def plot():
             x,y,c = list(),list(),list()
-            for candidate,count in window_candidates[window]:
+            for candidate in window_candidates[window]:
                 x.append(candidate.zen)
                 y.append(candidate.azi)
-                c.append(count)
+                c.append(candidate.count)
             plt.figure()
             plt.title(f"DoA candidates for window {window}")
             plt.xlim(-180,180)
@@ -106,7 +120,7 @@ class DoA_via_bands:
             plt.colorbar()
         def plot_v2():
             x,y,c = list(),list(),list()
-            for candidate,count in window_candidates[window]:
+            for candidate in window_candidates[window]:
                 x.append(candidate.zen * torch.pi/180)
                 y.append(candidate.azi * torch.pi/180)
                 c.append(1)

@@ -3,9 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
+import torch.nn as nn
 
 
-class optimizer:
+class optimizer(nn.Module):
     def __init__(
         self,
         Y_p,
@@ -15,6 +16,7 @@ class optimizer:
         method="GD_lagrange_multi",
         device="cpu",
     ):
+        super().__init__()
         self.device = device
         self.Y_p = Y_p.to(self.device)
         self.num_SH_coeff = Y_p.shape[0]
@@ -23,6 +25,7 @@ class optimizer:
         self.dim_reduction = dim_reduction
         self.method = method
         self.constraint_tol = constraint_tol
+        self.reconstruction_loss = list()
 
     def objective(self, Omega_k):
         Omega_k = Omega_k.reshape(self.Omega_k0.shape)
@@ -44,7 +47,41 @@ class optimizer:
             self.objective, Omega_k0.flatten(), constraints=con, method="SLSQP"
         )
 
-    def GD_lagrange_multi(self, Omega_k0, iter=1e5, mu=1e-3, ro=1e-3):
+    def GD_Deep(self,num_iterations : int):
+        def init_para():
+            self.learned_mu = nn.Parameter(torch.full((num_iterations,1,self.num_bins,1,1),1e-3,device=self.device),requires_grad=True)
+            self.learned_lambda = nn.Parameter(torch.full((num_iterations,1,self.num_bins,1,1),self.alpha,device=self.device),requires_grad=True)
+        def loss(Omega_k : torch.tensor, iter : int):
+            loss = self.constraint(Omega_k) + self.learned_lambda[iter] * self.objective(Omega_k)
+        def loss_grad(Omega_k : torch.tensor, iter : int):
+            regularization_grad = self.learned_lambda[iter] * Omega_k / (torch.sqrt(torch.sum(Omega_k**2, dim=-1))[..., None])
+            transposed_Yp = reduced_Yp.permute(0, 1, 3, 2)
+            broadcasted_transposed_Yp = torch.broadcast_to(
+                transposed_Yp,
+                (
+                    self.num_windows,
+                    self.num_bins,
+                    transposed_Yp.shape[-2],
+                    transposed_Yp.shape[-1],
+                ),
+            )
+            reconstruction_grad = 2*torch.matmul(broadcasted_transposed_Yp ,(torch.matmul(reduced_Yp, Omega_k) - torch.matmul(self.Uk, self.Lambda_k)))
+            return reconstruction_grad + regularization_grad
+        
+        init_para()
+        non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).to(self.device)
+        reduced_Yp = self.Y_p[:, :, :, non_zero_indices_in_grid].reshape(
+            self.num_windows, self.num_bins, self.num_SH_coeff, -1
+        )  # TODO Currently assumes mask doesnt change over time
+
+        Omega_k = torch.randn(*self.Omega_k0.shape).to(self.device)
+        for iter in tqdm(range(int(num_iterations))):
+            Omega_k -= self.learned_mu[iter] * loss_grad(Omega_k,iter) 
+            self.reconstruction_loss.append(10*torch.log10(torch.sum(self.constraint(Omega_k)**2)).cpu().detach())
+        return Omega_k
+
+
+    def GD_lagrange_multi(self, iter=1e5, mu=1e-3, ro=1e-3):
         def grad_omega_k(Omega_k, lagrange_multi_k):
             Omega_k = Omega_k.reshape(self.Omega_k0.shape)
             grad = Omega_k / torch.sqrt(torch.sum(Omega_k**2, dim=-1))[..., None]
@@ -77,8 +114,8 @@ class optimizer:
         lagrange_multi_k = torch.zeros(
             (self.num_windows, self.num_bins, self.num_SH_coeff**2, 1)
         ).to(self.device)
-        Omega_k = torch.randn(*Omega_k0.shape).to(self.device)
-        for iter in tqdm(range(int(iter))):
+        Omega_k = torch.randn(*self.Omega_k0.shape).to(self.device)
+        for iii in tqdm(range(int(iter))):
             non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).to(self.device)
             reduced_Yp = self.Y_p[:, :, :, non_zero_indices_in_grid].reshape(
                 self.num_windows, self.num_bins, self.num_SH_coeff, -1
@@ -102,8 +139,9 @@ class optimizer:
                         )
                     else:
                         lagrange_multi_k[i] = max(0, lagrange_multi_k[i])
+            self.reconstruction_loss.append(10*torch.log10(torch.sum(self.constraint(Omega_k)**2)).cpu().detach())
         self.constraint_loss = self.constraint(Omega_k, reduced_Yp)  # not really a loss
-        self.objective_loss = self.objective(Omega_k)
+        
         return Omega_k
 
     def unmix_and_smooth(self, Bk, Omega_k_opt, D_prior):
@@ -172,11 +210,19 @@ class optimizer:
             Omega_k_opt = res.x.reshape(self.Omega_k0.shape)
 
         if self.method == "GD_lagrange_multi":
-            Omega_k_opt = self.GD_lagrange_multi(self.Omega_k0, iter=itr)
+            Omega_k_opt = self.GD_lagrange_multi(iter=itr)
+
+        if self.method == "GD_Deep":
+            Omega_k_opt = self.GD_Deep(int(itr))
 
         if self.method == "SLS":
             Omega_k_opt = self.SLS()
 
+        plt.figure()
+        plt.plot(self.reconstruction_loss)
+        plt.title("Loss")
+        plt.xlabel("Iterations")
+        plt.ylabel("Loss [Db]")
         if cheat:
             print("Finished Optimization...Stopping")
             return Bk, Omega_k_opt
