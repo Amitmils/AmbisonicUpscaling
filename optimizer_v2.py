@@ -11,7 +11,6 @@ import utils
 class optimizer_v2(nn.Module):
     def __init__(
         self,
-        sound_field: SoundField,
         Y_p: torch.tensor,
         alpha: int,
         num_iters: int,
@@ -20,7 +19,6 @@ class optimizer_v2(nn.Module):
     ):
         super().__init__()
         self.device = device
-        self.sound_field = sound_field
         self.Y_p = Y_p.to(self.device)
         self.num_SH_coeff = Y_p.shape[0]
         self.num_grid_points = Y_p.shape[1]
@@ -96,7 +94,7 @@ class optimizer_v2(nn.Module):
         num_non_zero_indices_in_grid = torch.count_nonzero(
             mask[0, 0, :]
         )  # ASSUMES MASK DOESNT CHANGE OVER TIME
-        self.Y_p = torch.broadcast_to(
+        self.Y_p_broadcast = torch.broadcast_to(
             self.Y_p, (self.num_windows, self.num_bins, *self.Y_p.shape)
         )
 
@@ -116,7 +114,7 @@ class optimizer_v2(nn.Module):
 
     def perform_optimization(self):
         non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).to(self.device)
-        self.reduced_Yp = self.Y_p[:, :, :, non_zero_indices_in_grid].reshape(
+        self.reduced_Yp = self.Y_p_broadcast[:, :, :, non_zero_indices_in_grid].reshape(
             self.num_windows, self.num_bins, self.num_SH_coeff, -1
         )  # TODO Currently assumes mask doesnt change over time
 
@@ -136,17 +134,17 @@ class optimizer_v2(nn.Module):
         return Omega_k
 
     def post_processing(self, Bk, Omega_k_opt, D_prior):
-        #Placeholder for the sparse dictionary
+        # Placeholder for the sparse dictionary
         Sk = torch.zeros(
             (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),
             dtype=torch.float32,
         )  # (num windows,num bins,SH Coeff, Window length)
 
-        #Unmix & Smooth
+        # Unmix & Smooth
         Dk = torch.matmul(
             Omega_k_opt,
             torch.linalg.pinv(torch.matmul(self.Uk, self.Lambda_k)),
-        ).cpu()
+        )
         if D_prior is not None:
             Dk = self.alpha * Dk + (1 - self.alpha) * D_prior
         Sk_gpu = torch.matmul(Dk, Bk)
@@ -167,43 +165,40 @@ class optimizer_v2(nn.Module):
         self.learned_lambda = nn.Parameter(
             torch.full(
                 (self.num_iters, 1, self.num_bins, 1, 1),
-                self.alpha,
+                0.1,
                 device=self.device,
             ),
             requires_grad=self.deep_unfolded,
         )
 
-    def forward(self, mask, upscale_order=3, preprocessing=True):
+    def forward(
+        self, sound_field: SoundField, mask, preprocessing=True
+    ):
+        #Soundfield is more for debugging issues, we can remove it later
 
         if preprocessing:
-            Bk = self.sound_field.windowed_anm_t.permute(
+            Bk = sound_field.windowed_anm_t.permute(
                 0, 1, 3, 2
-            )  # turn to (window,band,SH_coeff,time)
+            ).to(self.device)  # turn to (window,band,SH_coeff,time)
             if mask is not None:
                 mask_matrix = mask[None, None, ...]
             else:
                 mask_matrix = None
             self.pre_processing(Bk, mask_matrix)
 
-        #Note2Self : If we do optimization per band/window the post processing and opt need to come together
-        #the rest is only when we are all down with the optimization
+        # Note2Self : If we do optimization per band/window the post processing and opt need to come together
+        # the rest is only when we are all down with the optimization
         opt_Omega_K = self.perform_optimization()
-        self.sound_field.sparse_dict_subbands, Dk_cpu = self.post_processing(
+        sound_field.sparse_dict_subbands, Dk_cpu = self.post_processing(
             Bk, opt_Omega_K, D_prior=None
         )
 
-
         # sum of all subbands
-        self.sound_field.s_windowed = torch.sum(
-            self.sound_field.sparse_dict_subbands, axis=1
+        sound_field.s_windowed = torch.sum(sound_field.sparse_dict_subbands, axis=1)
+
+        sound_field.s_dict = sound_field.s_windowed.permute(1, 0, 2).reshape(
+            sound_field.num_grid_points,
+            sound_field.window_length * sound_field.num_windows,
         )
 
-        self.sound_field.s_dict = self.sound_field.s_windowed.permute(1, 0, 2).reshape(
-            self.sound_field.num_grid_points,
-            self.sound_field.window_length * self.sound_field.num_windows,
-        )
-        Y_p_tag = utils.create_sh_matrix(
-            upscale_order, zen=self.sound_field.P_th, azi=self.sound_field.P_ph
-        )  # upscaling matrix
-        self.sound_field.anm_upscaled = torch.matmul(Y_p_tag, self.sound_field.s_dict)
-        return self.sound_field.anm_upscaled
+        return sound_field.sparse_dict_subbands

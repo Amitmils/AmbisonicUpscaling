@@ -1,7 +1,7 @@
 import utils
 import math
 import multiprocessing as mp
-from typing import List, Union
+from typing import List, Union, Optional
 import scipy.io
 from tqdm import tqdm
 import os
@@ -11,12 +11,68 @@ from py_bank.filterbanks import EqualRectangularBandwidth
 from signal_info import signal_info
 from optimizer import optimizer
 import sounddevice as sd
+from torch.utils.data import Dataset
 
 
 LEBEDEV_GRID_PATH = "Lebvedev2702.mat"
 LEBEDEV = "lebedev"
 POINTS_162 = "162_points"
 
+
+def divide_to_subbands(
+    anm_t: torch.tensor,
+    num_bins: int,
+    downsample: int = 2,
+    low_filter_center_freq: int = 1,
+    sr: int = 16000,
+) -> torch.tensor:
+    # signal is size [num_samples,(ambi Order+1)^2]
+    anm_t = anm_t[::downsample]
+    assert downsample == 1, "Downsample is not supported yet"
+    # self.sr = self.sr / downsample #FIX - if downsample > 1 we need a LPF
+
+    if num_bins == 1:
+        anm_t_subbands = anm_t[None, ...]
+    else:
+        num_bins -= 2  # for perfect reconstruction (first bin is low pass and last bin is high pass)
+        high_filter_center_freq = sr / 2  # centre freq. of highest filter
+        num_samples, num_coeff = anm_t.shape  # filter bank length
+        erb_bank = EqualRectangularBandwidth(
+            num_samples,
+            sr,
+            num_bins,
+            low_filter_center_freq,
+            high_filter_center_freq,
+        )
+        anm_t_subbands = torch.zeros(
+            (num_bins + 2, num_samples, num_coeff)
+        )  # num_bins + low and high for perfect reconstruction  | filter_length = num of SH coeff | num_samples = t
+        for coeff in range(num_coeff):
+            erb_bank.generate_subbands(anm_t[:, coeff].cpu().numpy())
+            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T)
+
+    # [pass band k,t,SH_coeff]
+    return anm_t_subbands
+
+def divide_to_time_windows(
+        anm_t_subbands: torch.tensor, window_length: int, max_num_windows: int
+    ) -> torch.tensor:
+        # signal is size [band pass k ,time samples,(ambi Order+1)^2]
+        num_samples = anm_t_subbands.shape[1]
+
+        # Pad the tensor
+        padding = (0, 0, 0, window_length - num_samples % window_length)
+        anm_t_padded = torch.nn.functional.pad(
+            anm_t_subbands, padding, mode="constant", value=0
+        )
+
+        # Split the tensor into windows (Window,Freq Bin,SH Coeff,Time)
+        windowed_anm_t = anm_t_padded.unfold(
+            dimension=1, step=window_length, size=window_length
+        ).permute(1, 0, 3, 2)
+
+        windowed_anm_t = windowed_anm_t[:max_num_windows]
+        return windowed_anm_t
 
 class SoundField:
     def __init__(self, device: torch.device = torch.device("cpu")) -> None:
@@ -30,11 +86,13 @@ class SoundField:
         SH_type: str = "real",
         grid_type: str = LEBEDEV,
         debug=False,
+        sr: Optional[int] = -1,
     ) -> None:
-        signals, self.sr = self._ensure_same_sr(signals)
+        signals, self.sr = self._align_sr(signals, force_sr=sr)
         self.anm_t_list = []
         self.y_list = []
         self.sources_coords = []
+        self.has_mask = False
         self.input_order = order
         max_length = 0
 
@@ -62,9 +120,7 @@ class SoundField:
             )
 
         self._create_grid(grid_type)
-        Y_p = utils.create_sh_matrix(
-            order, zen=self.P_th, azi=self.P_ph, type=SH_type
-        )
+        Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type)
 
         if debug:
             # project first time sample on 192 points
@@ -77,9 +133,14 @@ class SoundField:
                 values=projected_values,
                 title=f"Encoded Signal N={order}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
             )
+        return total_anm_t
 
-        self.anm_t = total_anm_t
-        return self.anm_t
+    def __len__(self):
+        if hasattr(self, "anm_t"):
+            return self.anm_t.shape[0]
+        else:
+            print("Sound field not created yet")
+            return 0
 
     def save_sound_field(self, dir: str) -> None:
         mask_str = "mask" if self.has_mask else "NOmask"
@@ -94,75 +155,22 @@ class SoundField:
         # TODO
         pass
 
-    def divide_to_subbands(
-        self, num_bins: int, downsample: int = 2, low_filter_center_freq: int = 1
-    ) -> torch.tensor:
-        # signal is size [num_samples,(ambi Order+1)^2]
-        assert hasattr(self, "anm_t"), "You must first create the sound field"
-        anm_t = self.anm_t[::downsample]
-        self.sr = self.sr / downsample
-        self.num_bins = num_bins
-
-        if num_bins == 1:
-            self.anm_t_subbands = anm_t[None, ...]
-        else:
-            num_bins -= 2  # for perfect reconstruction (first bin is low pass and last bin is high pass)
-            high_filter_center_freq = self.sr / 2  # centre freq. of highest filter
-            num_samples, num_coeff = anm_t.shape  # filter bank length
-            erb_bank = EqualRectangularBandwidth(
-                num_samples,
-                self.sr.cpu().numpy(),
-                num_bins,
-                low_filter_center_freq,
-                high_filter_center_freq.cpu().numpy(),
-            )
-            anm_t_subbands = torch.zeros(
-                (num_bins + 2, num_samples, num_coeff)
-            )  # num_bins + low and high for perfect reconstruction  | filter_length = num of SH coeff | num_samples = t
-            for coeff in range(num_coeff):
-                erb_bank.generate_subbands(anm_t[:, coeff].cpu().numpy())
-                anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T)
-
-            # [pass band k,t,SH_coeff]
-            self.anm_t_subbands = anm_t_subbands
-        return self.anm_t_subbands
-
-    def divide_to_time_windows(
-        self, window_length: int, max_num_windows: int
-    ) -> torch.tensor:
-        assert hasattr(self, "anm_t_subbands"), "You must first divide to subbands"
-        # signal is size [band pass k ,time samples,(ambi Order+1)^2]
-        num_samples = self.anm_t_subbands.shape[1]
-
-        # Pad the tensor
-        padding = (0, 0, 0, window_length - num_samples % window_length)
-        anm_t_padded = torch.nn.functional.pad(
-            self.anm_t_subbands, padding, mode="constant", value=0
-        )
-
-        # Split the tensor into windows (Window,Freq Bin,SH Coeff,Time)
-        windowed_anm_t = anm_t_padded.unfold(
-            dimension=1, step=window_length, size=window_length
-        ).permute(1, 0, 3, 2)
-
-        self.windowed_anm_t = windowed_anm_t[:max_num_windows]
-        self.num_windows = self.windowed_anm_t.shape[0]
-        self.window_length = window_length
-        return self.windowed_anm_t
-
-    def _ensure_same_sr(self, signals: List[signal_info]) -> List[signal_info]:
+    def _align_sr(
+        self, signals: List[signal_info], force_sr: int = -1
+    ) -> List[signal_info]:
+        # if force_sr is -1, the minimum sr will be used
         fs_list = torch.tensor([sig.sr for sig in signals])
-        smallest_fs = min(fs_list)
-        signals_w_highest_fs = (fs_list != smallest_fs).nonzero()
-        if len(signals_w_highest_fs) > 0:
-            for i in signals_w_highest_fs[0]:
+        new_sr = min(fs_list) if force_sr == -1 else force_sr
+        signals_to_resample = (fs_list != new_sr).nonzero()
+        if len(signals_to_resample) > 0:
+            for i in signals_to_resample[0]:
                 assert (
-                    fs_list[i] % smallest_fs == 0
-                ), f"Error in fs for file {signals[i].name} (min is {smallest_fs} and it has {fs_list[i]})"
+                    fs_list[i] % new_sr == 0
+                ), f"Error in sr for file {signals[i].name} (new sr is {new_sr} and it has {fs_list[i]})"
                 signals[i].signal = utils._resample(
-                    signals[i].signal, signals[i].sr, smallest_fs
+                    signals[i].signal, signals[i].sr, new_sr
                 )
-        return signals, smallest_fs
+        return signals, new_sr
 
     def _create_grid(self, grid_type):
         if grid_type == LEBEDEV:
@@ -187,7 +195,7 @@ class SoundField:
         mask=None,
         iter=1e5,
         multi_processing: bool = True,
-        save = False,
+        save=False,
     ):
         Bk_matrix = self.windowed_anm_t.permute(
             0, 1, 3, 2
@@ -204,9 +212,8 @@ class SoundField:
             self.num_grid_points, self.window_length * self.num_windows
         )
         if save:
-            self.save_sound_field('data/output')
-        return self.sparse_dict_subbands,self.s_windowed,self.s_dict
-
+            self.save_sound_field("data/output")
+        return self.sparse_dict_subbands, self.s_windowed, self.s_dict
 
     def get_sparse_dict(self, opt: optimizer, mask=None, multi_processing: bool = True):
         spare_dict_subbands = torch.zeros(
@@ -294,19 +301,35 @@ class SoundField:
                     )
                 )
         print(sound.shape)
-        grid_in_degress = torch.stack((self.P_ph,self.P_th)).T * 180/torch.pi
-        target_in_degress = torch.tensor([phi,theta]).reshape(1,-1)
-        relevant_grid_points = (torch.norm(grid_in_degress-target_in_degress, p=2, dim=1) < radius).nonzero().flatten()
+        grid_in_degress = torch.stack((self.P_ph, self.P_th)).T * 180 / torch.pi
+        target_in_degress = torch.tensor([phi, theta]).reshape(1, -1)
+        relevant_grid_points = (
+            (torch.norm(grid_in_degress - target_in_degress, p=2, dim=1) < radius)
+            .nonzero()
+            .flatten()
+        )
 
         if len(relevant_grid_points) > 0:
             print("## Playing Directions ##")
             for i in relevant_grid_points:
-                print(
-                    f"Theta = {grid_in_degress[i,0]}, Phi = {grid_in_degress[i,1]}"
-                )
+                print(f"Theta = {grid_in_degress[i,0]}, Phi = {grid_in_degress[i,1]}")
         else:
             print("No directions found")
             return
 
         signal = torch.sum(sound[relevant_grid_points, :], axis=0)
         sd.play(signal.cpu().numpy(), self.sr)
+
+
+class SoundFieldDataset(Dataset):
+    def __init__(self, data: dict) -> None:
+        super().__init__()
+        self.data = data["data"]
+        for key, value in data["config"].items():
+            setattr(self, key, value)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
