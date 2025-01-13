@@ -138,6 +138,7 @@ class optimizer_v2(nn.Module):
         Sk = torch.zeros(
             (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),
             dtype=torch.float32,
+            device=Bk.device,
         )  # (num windows,num bins,SH Coeff, Window length)
 
         # Unmix & Smooth
@@ -148,12 +149,12 @@ class optimizer_v2(nn.Module):
         if D_prior is not None:
             Dk = self.alpha * Dk + (1 - self.alpha) * D_prior
         Sk_gpu = torch.matmul(Dk, Bk)
-        Sk_cpu = Sk_gpu.cpu()
-        Dk_cpu = Dk.cpu()
+        # Sk_cpu = Sk_gpu.cpu()
+        # Dk_cpu = Dk.cpu()
         non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).flatten()
-        Sk[:, :, non_zero_indices_in_grid, :] = Sk_cpu
+        Sk[:, :, non_zero_indices_in_grid, :] = Sk_gpu
 
-        return Sk, Dk_cpu
+        return Sk, Dk
 
     def init_weights(self):
         self.learned_mu = nn.Parameter(
@@ -171,15 +172,13 @@ class optimizer_v2(nn.Module):
             requires_grad=self.deep_unfolded,
         )
 
-    def forward(
-        self, sound_field: SoundField, mask, preprocessing=True
-    ):
-        #Soundfield is more for debugging issues, we can remove it later
+    def forward(self, a_nmt_subbands_windowed: torch.tensor, mask, preprocessing=True):
+        # Soundfield is more for debugging issues, we can remove it later
 
         if preprocessing:
-            Bk = sound_field.windowed_anm_t.permute(
-                0, 1, 3, 2
-            ).to(self.device)  # turn to (window,band,SH_coeff,time)
+            Bk = a_nmt_subbands_windowed.permute(0, 1, 3, 2).to(
+                self.device
+            )  # turn to (window,band,SH_coeff,time)
             if mask is not None:
                 mask_matrix = mask[None, None, ...]
             else:
@@ -189,16 +188,16 @@ class optimizer_v2(nn.Module):
         # Note2Self : If we do optimization per band/window the post processing and opt need to come together
         # the rest is only when we are all down with the optimization
         opt_Omega_K = self.perform_optimization()
-        sound_field.sparse_dict_subbands, Dk_cpu = self.post_processing(
+        sparse_dict_subbands_windowed, Dk_cpu = self.post_processing(
             Bk, opt_Omega_K, D_prior=None
         )
 
-        # sum of all subbands
-        sound_field.s_windowed = torch.sum(sound_field.sparse_dict_subbands, axis=1)
+        # # sum of all subbands
+        # sound_field.s_windowed = torch.sum(sound_field.sparse_dict_subbands, axis=1)
 
-        sound_field.s_dict = sound_field.s_windowed.permute(1, 0, 2).reshape(
-            sound_field.num_grid_points,
-            sound_field.window_length * sound_field.num_windows,
-        )
+        # sound_field.s_dict = sound_field.s_windowed.permute(1, 0, 2).reshape(
+        #     sound_field.num_grid_points,
+        #     sound_field.window_length * sound_field.num_windows,
+        # )
 
-        return sound_field.sparse_dict_subbands
+        return sparse_dict_subbands_windowed

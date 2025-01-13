@@ -7,7 +7,7 @@ from tqdm import tqdm
 import os
 import torch
 from datetime import datetime
-from py_bank.filterbanks import EqualRectangularBandwidth
+from py_bank.filterbanks_pytorch import EqualRectangularBandwidth
 from signal_info import signal_info
 from optimizer import optimizer
 import sounddevice as sd
@@ -19,15 +19,33 @@ LEBEDEV = "lebedev"
 POINTS_162 = "162_points"
 
 
+def create_grid(grid_type):
+    if grid_type == LEBEDEV:
+        num_grid_points = 2702  # P
+        lebedev = scipy.io.loadmat("Lebvedev2702.mat")
+        P_th = torch.tensor(lebedev["th"].reshape(-1))  # rad
+        P_ph = torch.tensor(lebedev["ph"].reshape(-1))  # rad
+        P_ph = (P_ph + torch.pi) % (
+            2 * torch.pi
+        ) - torch.pi  # wrap angles to [-pi,pi]
+    elif grid_type == POINTS_162:
+        num_grid_points = 162  # P
+        points = utils.generate_sphere_points(162, plot=False)
+        P_th = points[:, 1]
+        P_ph = points[:, 2]
+    else:
+        raise ValueError(f"Unknown grid type {grid_type}")
+    return P_th, P_ph, num_grid_points
+
 def divide_to_subbands(
     anm_t: torch.tensor,
     num_bins: int,
-    downsample: int = 2,
+    downsample: int = 1,
     low_filter_center_freq: int = 1,
     sr: int = 16000,
 ) -> torch.tensor:
     # signal is size [num_samples,(ambi Order+1)^2]
-    anm_t = anm_t[::downsample]
+    anm_t = anm_t[::downsample].squeeze()
     assert downsample == 1, "Downsample is not supported yet"
     # self.sr = self.sr / downsample #FIX - if downsample > 1 we need a LPF
 
@@ -48,8 +66,8 @@ def divide_to_subbands(
             (num_bins + 2, num_samples, num_coeff)
         )  # num_bins + low and high for perfect reconstruction  | filter_length = num of SH coeff | num_samples = t
         for coeff in range(num_coeff):
-            erb_bank.generate_subbands(anm_t[:, coeff].cpu().numpy())
-            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T)
+            erb_bank.generate_subbands(anm_t[:, coeff])
+            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T).clone()
 
     # [pass band k,t,SH_coeff]
     return anm_t_subbands
@@ -119,7 +137,7 @@ class SoundField:
                 (0, 0, 0, max_length - self.anm_t_list[i].shape[0]),
             )
 
-        self._create_grid(grid_type)
+        self.P_th, self.P_ph, self.num_grid_points = create_grid(grid_type)
         Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type)
 
         if debug:
@@ -161,6 +179,9 @@ class SoundField:
         # if force_sr is -1, the minimum sr will be used
         fs_list = torch.tensor([sig.sr for sig in signals])
         new_sr = min(fs_list) if force_sr == -1 else force_sr
+        if min(fs_list)<force_sr:
+            print(f"Warning: The minimum sr is {min(fs_list)} and the requested sr is {force_sr}. The signals will be resampled to {min(fs_list)}")
+        
         signals_to_resample = (fs_list != new_sr).nonzero()
         if len(signals_to_resample) > 0:
             for i in signals_to_resample[0]:
@@ -322,9 +343,10 @@ class SoundField:
 
 
 class SoundFieldDataset(Dataset):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict,device : str = 'cpu') -> None:
         super().__init__()
         self.data = data["data"]
+        self.device = device
         for key, value in data["config"].items():
             setattr(self, key, value)
 
@@ -332,4 +354,5 @@ class SoundFieldDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        return self.data[idx][0].to(self.device),self.data[idx][1].to(self.device)
+

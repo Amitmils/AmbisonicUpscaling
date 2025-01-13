@@ -4,7 +4,7 @@ Created 06/03/2018
 '''
 
 import numpy as np
-
+import torch
 
 class FilterBank(object):
     """
@@ -54,6 +54,30 @@ class FilterBank(object):
         fft_subbands = np.multiply(fft_filts, tile)
         # ifft works on rows; imag part is small, probably discretization error?
         self.subbands = np.transpose(np.real(np.fft.ifft(np.transpose(fft_subbands))))
+
+    def generate_subbands_torch(self, signal):
+        if signal.shape[0] == 1:  # turn into column vector
+            signal = signal.t()
+        N = self.filters.shape[1] - 2
+        signal_length = signal.shape[0]
+        filt_length = self.filters.shape[0]
+        
+        # watch out: PyTorch fft acts on rows, whereas Matlab fft acts on columns
+        fft_sample = torch.fft.fft(signal, dim=0).t()
+        
+        # generate negative frequencies in right place; filters are column vectors
+        if signal_length % 2 == 0:  # even length
+            fft_filts = torch.cat([torch.tensor(self.filters), torch.flipud(self.filters[1:filt_length - 1, :])], dim=0)
+        else:  # odd length
+            fft_filts = torch.cat([self.filters, torch.flipud(self.filters[1:filt_length, :])], dim=0)
+        
+        # multiply by array of column replicas of fft_sample
+        tile = fft_sample.reshape(-1.1) @ torch.ones(1, N + 2, device=signal.device)
+        fft_subbands = fft_filts * tile
+        
+        # ifft works on rows; imag part is small, probably discretization error?
+        subbands = torch.real(torch.fft.ifft(fft_subbands.t(), dim=0)).t()
+        return subbands
 
 
 class EqualRectangularBandwidth(FilterBank):
