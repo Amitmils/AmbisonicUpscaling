@@ -1,7 +1,8 @@
 *.asv
 .DS_Store
-__pycache__
+*/__pycache__/*
+__pycache__/*
 .vscode*
-data/output/*
+data/*
 *venv/*
 data\WSJ0
