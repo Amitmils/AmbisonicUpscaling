@@ -63,11 +63,11 @@ def divide_to_subbands(
             high_filter_center_freq,
         )
         anm_t_subbands = torch.zeros(
-            (num_bins + 2, num_samples, num_coeff)
+            (num_bins + 2, num_samples, num_coeff),device=anm_t.device
         )  # num_bins + low and high for perfect reconstruction  | filter_length = num of SH coeff | num_samples = t
         for coeff in range(num_coeff):
             erb_bank.generate_subbands(anm_t[:, coeff])
-            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T).clone()
+            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T).clone().detach()
 
     # [pass band k,t,SH_coeff]
     return anm_t_subbands
@@ -212,13 +212,14 @@ class SoundField:
 
     def get_sparse_dict_v2(
         self,
+        windowed_anm_t : torch.tensor,
         opt: optimizer,
         mask=None,
         iter=1e5,
         multi_processing: bool = True,
         save=False,
     ):
-        Bk_matrix = self.windowed_anm_t.permute(
+        Bk_matrix = windowed_anm_t.permute(
             0, 1, 3, 2
         )  # turn to (window,band,SH_coeff,time)
         if mask is not None:
@@ -282,11 +283,16 @@ class SoundField:
             self.num_grid_points, self.window_length * self.num_windows
         )
 
-    def plot_sparse_dict(self, sample_idx: int):
+    def plot_sparse_dict(self, s_dict, sample_idx: int):
+        if s_dict.dim() == 4:
+            s_dict = torch.sum(s_dict, axis=1)
+            s_dict = s_dict.permute(1, 0, 2).reshape(
+            self.num_grid_points, self.window_length * self.num_windows
+        )
         utils.plot_on_2D(
             azi=self.P_ph,
             zen=self.P_th,
-            values=self.s_dict[:, sample_idx].cpu(),
+            values=s_dict[:, sample_idx].cpu(),
             title=f"Encoded Signal N={self.input_order} t={sample_idx}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
         )
 

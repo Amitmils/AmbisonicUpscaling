@@ -16,6 +16,7 @@ class optimizer_v2(nn.Module):
         num_iters: int,
         device: str = "cpu",
         deep_unfolded: bool = False,
+        num_bins : int = 45,
     ):
         super().__init__()
         self.device = device
@@ -25,6 +26,8 @@ class optimizer_v2(nn.Module):
         self.num_iters = int(num_iters)
         self.alpha = alpha
         self.deep_unfolded = deep_unfolded
+        self.init_weights(num_bins)
+
 
     def low_dim_regularization(self, Omega_k):
         Omega_k = Omega_k.reshape(self.Omega_k0.shape)
@@ -48,9 +51,10 @@ class optimizer_v2(nn.Module):
 
     def full_low_dim_loss_grad(self, Omega_k: torch.tensor, iter: int):
 
+        lambda_iter = self.learned_lambda[iter]
         # Regularization Grad
         low_dim_regularization_grad = (
-            self.learned_lambda[iter]
+            lambda_iter
             * Omega_k
             / (torch.sqrt(torch.sum(Omega_k**2, dim=-1))[..., None])
         )
@@ -73,11 +77,11 @@ class optimizer_v2(nn.Module):
                 - torch.matmul(self.Uk, self.Lambda_k)
             ),
         )
-        return reconstruction_grad + low_dim_regularization_grad
+        total_grad = reconstruction_grad + low_dim_regularization_grad
+        return total_grad
 
     def pre_processing(self, Bk, mask):
         self.num_windows, self.num_bins = Bk.shape[:2]
-        self.init_weights()
         # Dim Reduction
         if mask is None:
             mask = torch.ones(
@@ -118,10 +122,10 @@ class optimizer_v2(nn.Module):
             self.num_windows, self.num_bins, self.num_SH_coeff, -1
         )  # TODO Currently assumes mask doesnt change over time
 
-        Omega_k = torch.randn(*self.Omega_k0.shape).to(self.device)
+        Omega_k = torch.randn(*self.Omega_k0.shape).to(self.device).requires_grad_(True)
         self.low_dim_reconstruction_loss_per_iter = list()
         for iter in tqdm(range(self.num_iters)):
-            Omega_k -= self.learned_mu[iter] * self.full_low_dim_loss_grad(
+            Omega_k = Omega_k -  self.learned_mu[iter] * self.full_low_dim_loss_grad(
                 Omega_k, iter
             )
 
@@ -135,11 +139,11 @@ class optimizer_v2(nn.Module):
 
     def post_processing(self, Bk, Omega_k_opt, D_prior):
         # Placeholder for the sparse dictionary
-        Sk = torch.zeros(
-            (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),
-            dtype=torch.float32,
-            device=Bk.device,
-        )  # (num windows,num bins,SH Coeff, Window length)
+        # Sk = torch.zeros(
+        #     (self.num_windows, self.num_bins, self.num_grid_points, Bk.shape[-1]),
+        #     dtype=torch.float32,
+        #     device=Bk.device,
+        # )  # (num windows,num bins,SH Coeff, Window length)
 
         # Unmix & Smooth
         Dk = torch.matmul(
@@ -149,27 +153,28 @@ class optimizer_v2(nn.Module):
         if D_prior is not None:
             Dk = self.alpha * Dk + (1 - self.alpha) * D_prior
         Sk_gpu = torch.matmul(Dk, Bk)
+
         # Sk_cpu = Sk_gpu.cpu()
         # Dk_cpu = Dk.cpu()
-        non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).flatten()
-        Sk[:, :, non_zero_indices_in_grid, :] = Sk_gpu
+        # non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).flatten()
+        # Sk[:, :, non_zero_indices_in_grid, :] = Sk_gpu
 
-        return Sk, Dk
+        return Sk_gpu, Dk
 
-    def init_weights(self):
+    def init_weights(self,num_bins):
         self.learned_mu = nn.Parameter(
             torch.full(
-                (self.num_iters, 1, self.num_bins, 1, 1), 1e-3, device=self.device
+                (self.num_iters, 1, num_bins, 1, 1), 1e-3, device=self.device
             ),
-            requires_grad=self.deep_unfolded,
+            requires_grad=True#,self.deep_unfolded,
         )
         self.learned_lambda = nn.Parameter(
             torch.full(
-                (self.num_iters, 1, self.num_bins, 1, 1),
+                (self.num_iters, 1, num_bins, 1, 1),
                 0.1,
                 device=self.device,
             ),
-            requires_grad=self.deep_unfolded,
+            requires_grad=True,#self.deep_unfolded,
         )
 
     def forward(self, a_nmt_subbands_windowed: torch.tensor, mask, preprocessing=True):
