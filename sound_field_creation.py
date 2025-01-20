@@ -166,6 +166,9 @@ class sound_field:
         spare_dict_subbands = np.zeros(
             (self.num_windows, self.num_bins, self.num_grid_points, self.window_length)
         )
+        loss = np.zeros(
+            (self.num_windows, self.num_bins)
+        )
         if multi_processing:
             print("Multi Processing")
             args = [
@@ -179,10 +182,11 @@ class sound_field:
                     for result in pool.imap(opt.optimize, args):
                         results.append(result)
                         pbar.update()
-                for i, (s_subband, Dk) in enumerate(results):
+                for i, (s_subband, Dk,loss) in enumerate(results):
                     window = i // self.num_bins
                     band = i % self.num_bins
                     spare_dict_subbands[window, band, :, :] = s_subband
+                    # self.loss[window,band] = loss
         else:
             # Create a single progress bar for the outer loop (bands)
             outer_bar = tqdm(total=self.num_bins, desc="Bands", position=0, leave=True)
@@ -195,11 +199,11 @@ class sound_field:
                 )  # Inner bar for windows
                 for window in range(self.num_windows):
                     Bk = self.windowed_anm_t[window, band, :, :].T
-                    spare_dict_subbands[window, band, :, :], Dk = opt.optimize(
+                    spare_dict_subbands[window, band, :, :], Dk, loss = opt.optimize(
                         Bk, mask, D_prior=None
                     )
                     inner_bar.update(1)  # Update inner progress bar
                 inner_bar.close()  # Close the inner progress bar after finishing the inner loop
                 outer_bar.update(1)  # Update outer progress bar
-
+            self.loss = loss
         return spare_dict_subbands

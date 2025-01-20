@@ -35,7 +35,8 @@ class optimizer:
         
         lagrange_multi_k = np.zeros((self.Y_p.shape[0]**2,1))
         Omega_k = np.random.randn(Omega_k0.shape[0],Omega_k0.shape[1])
-        for iter in range(int(1e5)):
+        self.loss = list()
+        for iter in range(int(30000)):
             grad_omega = grad_omega_k(Omega_k,lagrange_multi_k)
             grad_lagrange_multi = grad_lagrange_multi_k(Omega_k)
             Omega_k -= mu * grad_omega
@@ -51,6 +52,8 @@ class optimizer:
                         lagrange_multi_k[i] += ro * (grad_lagrange_multi[i] + self.constraint_tol)
                     else:
                         lagrange_multi_k[i] = max(0, lagrange_multi_k[i])
+            self.loss.append(10*np.log10(np.linalg.norm(self.constraint(Omega_k),ord=2)**2))
+        print(iter)
         self.constraint_loss = self.constraint(Omega_k) #not really a loss
         self.objective_loss = self.objective(Omega_k)
         return Omega_k
@@ -94,4 +97,4 @@ class optimizer:
 
         Sk = np.zeros((self.Y_p.shape[1],Bk.shape[1]))
         Sk[self.mask,:], Dk = self.unmix_and_smooth(Bk,Omega_k_opt,D_prior)
-        return Sk, Dk
+        return Sk, Dk , self.loss
