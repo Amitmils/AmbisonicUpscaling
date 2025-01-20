@@ -38,40 +38,29 @@ class optimizer_v2(nn.Module):
         Omega_k = Omega_k.reshape(self.Omega_k0.shape)
         if Y_p is None:
             Y_p = self.Y_p
-        low_dim_reconstruction_loss = (
-            torch.norm(
+        
+        loss_per_window_per_band = torch.norm(
                 (
                     torch.matmul(Y_p, Omega_k) - torch.matmul(self.Uk, self.Lambda_k)
                 ).reshape(self.num_windows, self.num_bins, -1),
                 p=2,
-            )
-            ** 2
-        )
-        return low_dim_reconstruction_loss
+                dim=-1,
+            )** 2
+
+        # print(low_dim_reconstruction_loss)
+        return 10*torch.log10(loss_per_window_per_band).cpu().detach().unsqueeze(0)
 
     def full_low_dim_loss_grad(self, Omega_k: torch.tensor, iter: int):
-
-        lambda_iter = self.learned_lambda[iter]
         # Regularization Grad
         low_dim_regularization_grad = (
-            lambda_iter
+            self.learned_lambda[iter]
             * Omega_k
             / (torch.sqrt(torch.sum(Omega_k**2, dim=-1))[..., None])
         )
 
         # Reconstruction Grad
-        transposed_Yp = self.reduced_Yp.permute(0, 1, 3, 2)
-        broadcasted_transposed_Yp = torch.broadcast_to(
-            transposed_Yp,
-            (
-                self.num_windows,
-                self.num_bins,
-                transposed_Yp.shape[-2],
-                transposed_Yp.shape[-1],
-            ),
-        )
         reconstruction_grad = 2 * torch.matmul(
-            broadcasted_transposed_Yp,
+            self.reduced_Yp.t(),
             (
                 torch.matmul(self.reduced_Yp, Omega_k)
                 - torch.matmul(self.Uk, self.Lambda_k)
@@ -98,9 +87,6 @@ class optimizer_v2(nn.Module):
         num_non_zero_indices_in_grid = torch.count_nonzero(
             mask[0, 0, :]
         )  # ASSUMES MASK DOESNT CHANGE OVER TIME
-        self.Y_p_broadcast = torch.broadcast_to(
-            self.Y_p, (self.num_windows, self.num_bins, *self.Y_p.shape)
-        )
 
         self.mask = mask
         self.Uk, Lk, Vkt = torch.linalg.svd(Bk, full_matrices=False)
@@ -118,23 +104,18 @@ class optimizer_v2(nn.Module):
 
     def perform_optimization(self):
         non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).to(self.device)
-        self.reduced_Yp = self.Y_p_broadcast[:, :, :, non_zero_indices_in_grid].reshape(
-            self.num_windows, self.num_bins, self.num_SH_coeff, -1
+        self.reduced_Yp = self.Y_p[:, non_zero_indices_in_grid].reshape(
+            self.num_SH_coeff, -1
         )  # TODO Currently assumes mask doesnt change over time
 
         Omega_k = torch.randn(*self.Omega_k0.shape).to(self.device).requires_grad_(True)
-        self.low_dim_reconstruction_loss_per_iter = list()
+        self.low_dim_reconstruction_loss_per_iter = torch.tensor([])
         for iter in tqdm(range(self.num_iters)):
             Omega_k = Omega_k -  self.learned_mu[iter] * self.full_low_dim_loss_grad(
                 Omega_k, iter
             )
 
-            self.low_dim_reconstruction_loss_per_iter.append(
-                10
-                * torch.log10(torch.sum(self.low_dim_reconstruction_loss(Omega_k)))
-                .cpu()
-                .detach()
-            )
+            self.low_dim_reconstruction_loss_per_iter = torch.cat((self.low_dim_reconstruction_loss_per_iter,self.low_dim_reconstruction_loss(Omega_k)))
         return Omega_k
 
     def post_processing(self, Bk, Omega_k_opt, D_prior):
@@ -171,10 +152,10 @@ class optimizer_v2(nn.Module):
         self.learned_lambda = nn.Parameter(
             torch.full(
                 (self.num_iters, 1, num_bins, 1, 1),
-                0.1,
+                0.,
                 device=self.device,
             ),
-            requires_grad=True,#self.deep_unfolded,
+            requires_grad=False,#self.deep_unfolded,
         )
 
     def forward(self, a_nmt_subbands_windowed: torch.tensor, mask, preprocessing=True):

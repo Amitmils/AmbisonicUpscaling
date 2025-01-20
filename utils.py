@@ -10,6 +10,17 @@ import torchaudio
 import torch
 from signal_info import signal_info
 
+
+def plot_loss_tensor(loss_tensor):
+    loss_tensor = loss_tensor.cpu().detach()
+    num_iter,num_windows,num_bins = loss_tensor.shape
+    avg_loss_per_freq = torch.mean(loss_tensor,dim=1)
+    for i in range(num_bins):
+        plt.plot(avg_loss_per_freq[:,i],label=f"Freq {i}")
+    plt.xlabel("Iteration")
+    plt.ylabel("Loss")
+    plt.title("Loss Per Frequency Bin")
+
 def save_sparse_matrix(matrix, filename):
     """
     Save a sparse matrix to a file.

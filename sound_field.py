@@ -46,8 +46,8 @@ def divide_to_subbands(
 ) -> torch.tensor:
     # signal is size [num_samples,(ambi Order+1)^2]
     anm_t = anm_t[::downsample].squeeze()
-    assert downsample == 1, "Downsample is not supported yet"
-    # self.sr = self.sr / downsample #FIX - if downsample > 1 we need a LPF
+    # assert downsample == 1, "Downsample is not supported yet"
+    sr = sr / downsample #FIX - if downsample > 1 we need a LPF
 
     if num_bins == 1:
         anm_t_subbands = anm_t[None, ...]
@@ -137,6 +137,7 @@ class SoundField:
                 (0, 0, 0, max_length - self.anm_t_list[i].shape[0]),
             )
 
+        # total_anm_t = total_anm_t / torch.sqrt(torch.sum(total_anm_t ** 2))
         self.P_th, self.P_ph, self.num_grid_points = create_grid(grid_type)
         Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type)
 
@@ -293,7 +294,7 @@ class SoundField:
             azi=self.P_ph,
             zen=self.P_th,
             values=s_dict[:, sample_idx].cpu(),
-            title=f"Encoded Signal N={self.input_order} t={sample_idx}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
+            title=f"Sparse Dict t={sample_idx}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
         )
 
     def play_sparse_sound_field(
@@ -360,5 +361,5 @@ class SoundFieldDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx][0].to(self.device),self.data[idx][1].to(self.device)
+        return self.data[idx][0].to(self.device),self.data[idx][1].to(self.device),idx
 
