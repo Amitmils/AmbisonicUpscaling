@@ -67,7 +67,7 @@ def divide_to_subbands(
         )  # num_bins + low and high for perfect reconstruction  | filter_length = num of SH coeff | num_samples = t
         for coeff in range(num_coeff):
             erb_bank.generate_subbands(anm_t[:, coeff])
-            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands.T).clone().detach()
+            anm_t_subbands[:, :, coeff] = torch.tensor(erb_bank.subbands).clone().detach()
 
     # [pass band k,t,SH_coeff]
     return anm_t_subbands
@@ -106,7 +106,7 @@ class SoundField:
         debug=False,
         sr: Optional[int] = -1,
     ) -> None:
-        signals, self.sr = self._align_sr(signals, force_sr=sr)
+        self.signals, self.sr = self._align_sr(signals, force_sr=sr)
         self.anm_t_list = []
         self.y_list = []
         self.sources_coords = []
@@ -114,7 +114,7 @@ class SoundField:
         self.input_order = order
         max_length = 0
 
-        for curr_sig in signals:
+        for curr_sig in self.signals:
             self.sources_coords.append(
                 (math.degrees(curr_sig.th), math.degrees(curr_sig.ph))
             )
@@ -139,10 +139,10 @@ class SoundField:
 
         # total_anm_t = total_anm_t / torch.sqrt(torch.sum(total_anm_t ** 2))
         self.P_th, self.P_ph, self.num_grid_points = create_grid(grid_type)
-        Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type)
 
         if debug:
             # project first time sample on 192 points
+            Y_p = utils.create_sh_matrix(order, zen=self.P_th, azi=self.P_ph, type=SH_type)
             t = 0
             projected_values = total_anm_t[t, :] @ torch.conj(Y_p)
             # plot_on_sphere([P_th,P_ph],projected_values,title=f"Encoded Signal N={sh_order_input}\n$\\theta$ = {math.degrees(th)} $\\phi$ = {math.degrees(ph)}")
@@ -235,7 +235,10 @@ class SoundField:
             self.num_grid_points, self.window_length * self.num_windows
         )
         if save:
-            self.save_sound_field("data/output")
+            try:
+                self.save_sound_field("data/output")
+            except:
+                print("Saving Failed")
         return self.sparse_dict_subbands, self.s_windowed, self.s_dict
 
     def get_sparse_dict(self, opt: optimizer, mask=None, multi_processing: bool = True):
@@ -301,33 +304,38 @@ class SoundField:
         self,
         theta: float,
         phi: float,
+        sound : Optional[torch.tensor] = None,
         radius: float = 5,
         window: Union[int, None] = None,
         bin: Union[int, None] = None,
     ):
         # sound should be (num_grid_points,time samples)
-        if window is not None:
-            if bin is not None:
-                sound = self.sparse_dict_subbands[window, bin, :, :]
+        if sound is None:
+            if window is not None:
+                if bin is not None:
+                    sound = self.sparse_dict_subbands[window, bin, :, :]
+                else:
+                    sound = torch.sum(self.sparse_dict_subbands[window, :, :, :], axis=0)
             else:
-                sound = torch.sum(self.sparse_dict_subbands[window, :, :, :], axis=0)
-        else:
-            if bin is not None:
-                sound = (
-                    self.sparse_dict_subbands[:, bin, :, :]
-                    .permute(1, 0, 2)
-                    .reshape(
-                        self.num_grid_points, self.window_length * self.num_windows
+                if bin is not None:
+                    sound = (
+                        self.sparse_dict_subbands[:, bin, :, :]
+                        .permute(1, 0, 2)
+                        .reshape(
+                            self.num_grid_points, self.window_length * self.num_windows
+                        )
                     )
-                )
-            else:
-                sound = (
-                    torch.sum(self.sparse_dict_subbands, axis=1)
-                    .permute(1, 0, 2)
-                    .reshape(
-                        self.num_grid_points, self.window_length * self.num_windows
+                else:
+                    sound = (
+                        torch.sum(self.sparse_dict_subbands, axis=1)
+                        .permute(1, 0, 2)
+                        .reshape(
+                            self.num_grid_points, self.window_length * self.num_windows
+                        )
                     )
-                )
+        assert sound.dim() == 2 and self.num_grid_points in sound.shape, f"Sound wrong format {sound.shape}"
+        if sound.shape[1] == self.num_grid_points:
+            sound = sound.t()
         print(sound.shape)
         grid_in_degress = torch.stack((self.P_ph, self.P_th)).T * 180 / torch.pi
         target_in_degress = torch.tensor([phi, theta]).reshape(1, -1)

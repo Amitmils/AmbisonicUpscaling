@@ -95,12 +95,12 @@ class optimizer(nn.Module):
         for iter in tqdm(range(int(num_iterations))):
             Omega_k -= self.learned_mu[iter] * loss_grad(Omega_k, iter)
 
-            reconstruction_loss_per_window_freq_bin = 10*torch.log10(torch.norm(self.constraint(Omega_k),p=2,dim=-1)**2).unsqueeze(0)
-            self.reconstruction_loss = torch.cat((self.reconstruction_loss,reconstruction_loss_per_window_freq_bin),dim=0)
+            reconstruction_loss_per_window_freq_bin = 0#10*torch.log10(torch.norm(self.constraint(Omega_k),p=2,dim=-1)**2).unsqueeze(0)
+            # self.reconstruction_loss = torch.cat((self.reconstruction_loss,reconstruction_loss_per_window_freq_bin),dim=0)
 
         return Omega_k
 
-    def GD_lagrange_multi(self, iter=1e5, mu=1e-4, ro=1e-3):
+    def GD_lagrange_multi(self, iter=1e5, mu=1e-3, ro=1e-3):
         def grad_omega_k(Omega_k, lagrange_multi_k):
             Omega_k = Omega_k.reshape(self.Omega_k0.shape)
             grad = Omega_k / torch.sqrt(torch.sum(Omega_k**2, dim=-1))[..., None]
@@ -110,9 +110,8 @@ class optimizer(nn.Module):
                 self.num_SH_coeff,
                 self.num_SH_coeff,
             )
-            transposed_Yp = reduced_Yp.permute(1,0)
             grad += torch.matmul(
-                transposed_Yp,
+                reduced_Yp.t(),
                 reshaped_lagrange_multi_k,
             )
             return grad
@@ -126,11 +125,11 @@ class optimizer(nn.Module):
         ).to(self.device)
         Omega_k = torch.randn(*self.Omega_k0.shape).to(self.device)
         self.reconstruction_loss = self.reconstruction_loss.to(self.device)
-        for iii in tqdm(range(int(iter))):
-            non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).to(self.device)
-            reduced_Yp = self.Y_p[:, non_zero_indices_in_grid].reshape(
+        non_zero_indices_in_grid = torch.nonzero(self.mask[0, 0, :]).to(self.device)
+        reduced_Yp = self.Y_p[:, non_zero_indices_in_grid].reshape(
                 self.num_SH_coeff, -1
-            )  # TODO Currently assumes mask doesnt change over time
+        )  # TODO Currently assumes mask doesnt change over time
+        for iii in tqdm(range(int(iter))):
             grad_omega = grad_omega_k(Omega_k, lagrange_multi_k)
             grad_lagrange_multi = grad_lagrange_multi_k(Omega_k)
             Omega_k -= mu * grad_omega
@@ -150,8 +149,8 @@ class optimizer(nn.Module):
                         )
                     else:
                         lagrange_multi_k[i] = max(0, lagrange_multi_k[i])
-            reconstruction_loss_per_window_freq_bin = 10*torch.log10(torch.norm(self.constraint(Omega_k),p=2,dim=-1)**2).unsqueeze(0)
-            self.reconstruction_loss = torch.cat((self.reconstruction_loss,reconstruction_loss_per_window_freq_bin),dim=0)
+            # reconstruction_loss_per_window_freq_bin = 10*torch.log10(torch.norm(self.constraint(Omega_k),p=2,dim=-1)**2).unsqueeze(0)
+            # self.reconstruction_loss = torch.cat((self.reconstruction_loss,reconstruction_loss_per_window_freq_bin),dim=0)
         self.constraint_loss = self.constraint(Omega_k, reduced_Yp)  # not really a loss
 
         return Omega_k
@@ -227,7 +226,10 @@ class optimizer(nn.Module):
         if self.method == "SLS":
             Omega_k_opt = self.SLS()
 
-        utils.plot_loss_tensor(self.reconstruction_loss)
+        try:
+            utils.plot_loss_tensor(self.reconstruction_loss)
+        except:
+            print("Failed to plot loss")
         if cheat:
             print("Finished Optimization...Stopping")
             return Bk, Omega_k_opt

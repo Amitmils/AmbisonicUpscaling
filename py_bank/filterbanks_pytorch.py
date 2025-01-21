@@ -56,7 +56,7 @@ class FilterBank(object):
         fft_subbands = fft_filts * tile
         
         # ifft works on rows; imag part is small, probably discretization error?
-        self.subbands = torch.real(torch.fft.ifft(fft_subbands.t(), dim=0)).t()
+        self.subbands = torch.real(torch.fft.ifft(fft_subbands, dim=0)).t()
 
 
 class EqualRectangularBandwidth(FilterBank):
