@@ -120,7 +120,7 @@ def create_sh_matrix(N, azi, zen, type="real"):
     """
     azi = azi.reshape(-1)
     zen = zen.reshape(-1)
-    return torch.tensor(spa.sph.sh_matrix(N_sph=N, azi=azi.cpu().numpy(), zen=zen.cpu().numpy(), sh_type=type).transpose()).to(torch.float32)
+    return torch.tensor(spa.sph.sh_matrix(N_sph=N, azi=azi.cpu().numpy(), zen=zen.cpu().numpy(), sh_type=type).transpose())
 
 
 def fft_anm_t(anm_t, fs):
@@ -200,6 +200,7 @@ def encode_signal(
     ph=None,
     th=None,
     type="complex",
+    n_fft :int  = 1024,        # Number of FFT points
     plot=False,
     normalize_signal=True,
 ):
@@ -213,13 +214,28 @@ def encode_signal(
         raise f"signal must be of type signal_info"
     if normalize_signal:
         s = s / torch.sqrt(torch.mean(s**2))
-    y = torch.tensor(spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type)).to(torch.float32)
+    y = torch.tensor(spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type))
 
     if plot:
         debug = torch.ones((1, 16))
         debug = debug * (4 * torch.pi) / (debug.shape[1] + 1) ** 2
         spa.plot.sh_coeffs(y, cbar=False)  # Mirrored when use complex (Why?)
-    encoded_signal = torch.matmul(s.reshape(-1, 1), y.reshape(1, -1))
+    if type == "complex":
+        # Parameters for STFT
+        hop_length = n_fft//2   # Hop length (stride)
+        win_length = n_fft   # Window length
+        window = torch.hann_window(win_length)  # Hann window
+        s_f = torch.stft(
+            s.reshape(1,-1), 
+            n_fft=n_fft, 
+            hop_length=hop_length, 
+            win_length=win_length, 
+            window=window, 
+            return_complex=True,
+        )
+        encoded_signal = y.T.unsqueeze(1) * s_f  # Shape [B, 4, 513, 267]
+    else:
+        encoded_signal = torch.matmul(s.reshape(-1, 1), y.reshape(1, -1))
     return encoded_signal, s, fs, y
 
 
