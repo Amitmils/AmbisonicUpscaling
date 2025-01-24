@@ -189,7 +189,7 @@ class optimizer(nn.Module):
 
     def optimize_v2(self, stft_anmt, iter=1e5,mu=1e-3, ro=1e-3):
         def grad_dict(s_t, lagrange_multi_k):
-            grad = s_t / torch.sqrt(torch.sum(s_t**2, dim=-1))[..., None]
+            grad = s_t / torch.sqrt(torch.sum(s_t*torch.conj(s_t), dim=-1))[..., None]
             grad += torch.matmul(
                 self.Y_p.t(),
                 lagrange_multi_k,
@@ -199,13 +199,15 @@ class optimizer(nn.Module):
         def grad_lagrange_multi(s_t):
             constraint_res = torch.matmul(self.Y_p, s_t) - stft_anmt
             return constraint_res
+        def loss_func(s_t):
+            return 10*torch.log10(torch.real(torch.sum(torch.sqrt(torch.sum(s_t*torch.conj(s_t), dim=-1)))))
 
         # stft_anmt is (window,bin,4)
-        self.num_windows, self.num_channels,self.num_bins  = stft_anmt.shape
+        self.num_windows,self.num_channels,self.num_bins = stft_anmt.shape
         lagrange_multi_t = torch.zeros(
-            (self.num_windows, self.num_channels,self.num_bins),dtype=torch.complex32
+            (self.num_windows, self.num_channels,self.num_bins),dtype=torch.complex64
         ).to(self.device)
-        s_t = torch.randn(self.num_windows,self.num_grid_points, self.num_bins).to(
+        s_t = torch.randn(self.num_windows,self.num_grid_points, self.num_bins,dtype=torch.complex64).to(
             self.device
         )
         self.reconstruction_loss = self.reconstruction_loss.to(self.device)
@@ -214,6 +216,11 @@ class optimizer(nn.Module):
             grad_lagrange = grad_lagrange_multi(s_t)
             s_t -= mu * grad_s
             lagrange_multi_t += ro * grad_lagrange
+            self.reconstruction_loss = torch.cat(    
+                (self.reconstruction_loss,loss_func(s_t).unsqueeze(0)),
+                dim=0,
+            )
+        plt.plot(self.reconstruction_loss.cpu().detach())
         return s_t
 
     def optimize(self, Bk, itr=1e5, mask=None, D_prior=None, cheat=False):
