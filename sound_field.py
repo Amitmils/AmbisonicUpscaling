@@ -104,7 +104,7 @@ class SoundField:
         signals: List[signal_info],
         order: int,
         normalize_signals: bool = False,
-        SH_type: str = "real",
+        SH_type: str = "complex",
         grid_type: str = LEBEDEV,
         debug=False,
         sr: Optional[int] = -1,

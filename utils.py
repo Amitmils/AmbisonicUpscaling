@@ -105,7 +105,7 @@ def sph2cart(sph_coords):
     return torch.stack((x, y, z),dim=1)
 
 
-def create_sh_matrix(N, azi, zen, type="real"):
+def create_sh_matrix(N, azi, zen, type="complex"):
     """
     Create a spherical harmonics matrix.
 
@@ -233,7 +233,7 @@ def encode_signal(
             window=window, 
             return_complex=True,
         )
-        encoded_signal = y.T.unsqueeze(1) * s_f  # Shape [B, 4, 513, 267]
+        encoded_signal = y.T.unsqueeze(1) * s_f  # Shape [#Channels , #FreqBands, #TimeFrames] TODO Batches
     else:
         encoded_signal = torch.matmul(s.reshape(-1, 1), y.reshape(1, -1))
     return encoded_signal, s, fs, y
