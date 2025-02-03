@@ -187,37 +187,45 @@ class optimizer(nn.Module):
         Omega_opt = torch.linalg.pinv(self.Y_p[:, self.mask]) @ self.Uk @ self.Lambda_k
         return Omega_opt
 
-    def optimize_v2(self, stft_anmt, iter=1e5,mu=1e-3, ro=1e-3):
+    def optimize_v2(self, stft_anmt, iter=1e5, mu=1e-3, ro=1e-4):
         def grad_dict(s_t, lagrange_multi_k):
-            grad = s_t / torch.sqrt(torch.sum(s_t*torch.conj(s_t), dim=-1))[..., None]
-            grad += torch.matmul(
-                self.Y_p.t(),
-                lagrange_multi_k,
+            grad = s_t / torch.sqrt(
+                1e-10 + torch.sum(s_t * torch.conj(s_t), dim=-1, keepdim=True)
             )
+            tmp_grad = torch.matmul(self.Y_p.conj().t(), torch.complex(lagrange_multi_k[...,:self.num_bins],lagrange_multi_k[...,self.num_bins:]))
+            grad += torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1)
             return grad
 
         def grad_lagrange_multi(s_t):
-            constraint_res = torch.matmul(self.Y_p, s_t) - stft_anmt
-            return constraint_res
-        def loss_func(s_t):
-            return 10*torch.log10(torch.real(torch.sum(torch.sqrt(torch.sum(s_t*torch.conj(s_t), dim=-1)))))
+            constraint_res = torch.matmul(self.Y_p,torch.complex(s_t[...,:self.num_bins],s_t[...,self.num_bins:])) - torch.complex(stft_anmt[...,:self.num_bins],stft_anmt[...,self.num_bins:])
+            return torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
 
-        # stft_anmt is (window,bin,4)
-        self.num_windows,self.num_channels,self.num_bins = stft_anmt.shape
+        def loss_func(s_t):
+            return 10 * torch.log10(
+                torch.sum(torch.sqrt(torch.sum(s_t * torch.conj(s_t), dim=-1))) + 1e-10
+            )
+
+        # stft_anmt is (window,channels,bin) -->[#Windows,#Channels,#Bins *2 (Real,Imag)]
+        self.num_windows, self.num_channels, self.num_bins = stft_anmt.shape
+        stft_anmt = torch.cat((stft_anmt.real, stft_anmt.imag), dim=-1)
         lagrange_multi_t = torch.zeros(
-            (self.num_windows, self.num_channels,self.num_bins),dtype=torch.complex64
+            (self.num_windows, self.num_channels, self.num_bins * 2),
+            dtype=stft_anmt.dtype,
         ).to(self.device)
-        s_t = 0*torch.randn(self.num_windows,self.num_grid_points, self.num_bins,dtype=torch.complex64).to(
-            self.device
-        ) + 1e-6
+        s_t = torch.randn(
+            self.num_windows,
+            self.num_grid_points,
+            self.num_bins * 2,
+            dtype=stft_anmt.dtype,
+        ).to(self.device)
         self.reconstruction_loss = self.reconstruction_loss.to(self.device)
         for iii in tqdm(range(int(iter))):
             grad_s = grad_dict(s_t, lagrange_multi_t)
             grad_lagrange = grad_lagrange_multi(s_t)
             s_t -= mu * grad_s
             lagrange_multi_t += ro * grad_lagrange
-            self.reconstruction_loss = torch.cat(    
-                (self.reconstruction_loss,loss_func(s_t).unsqueeze(0)),
+            self.reconstruction_loss = torch.cat(
+                (self.reconstruction_loss, loss_func(s_t).unsqueeze(0)),
                 dim=0,
             )
         plt.plot(self.reconstruction_loss.cpu().detach())

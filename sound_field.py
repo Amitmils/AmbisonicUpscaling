@@ -151,7 +151,7 @@ class SoundField:
                 order, zen=self.P_th, azi=self.P_ph, type=SH_type
             )
             t = 0
-            projected_values = torch.abs((total_anm_f[:,:,t].t() @ torch.conj(Y_p)).sum(dim=0))
+            projected_values = (torch.abs((total_anm_f[:,:,t].t() @ torch.conj(Y_p)))**2).sum(dim=0)
             # plot_on_sphere([P_th,P_ph],projected_values,title=f"Encoded Signal N={sh_order_input}\n$\\theta$ = {math.degrees(th)} $\\phi$ = {math.degrees(ph)}")
             utils.plot_on_2D(
                 azi=self.P_ph,
@@ -231,8 +231,8 @@ class SoundField:
         save=False,
     ):
         num_windows,num_channels,num_bins = stft_anmt.shape
-        opt.optimize_v2(stft_anmt.to(self.device), iter)
-        pass
+        self.sparse_stft_dict = opt.optimize_v2(stft_anmt.to(self.device), iter)
+        return self.sparse_stft_dict
 
     def get_sparse_dict_v2(
         self,

@@ -105,7 +105,7 @@ def sph2cart(sph_coords):
     return torch.stack((x, y, z),dim=1)
 
 
-def create_sh_matrix(N, azi, zen, type="complex"):
+def create_sh_matrix(N, azi, zen, type="real"):
     """
     Create a spherical harmonics matrix.
 
