@@ -207,9 +207,9 @@ class optimizer(nn.Module):
         lagrange_multi_t = torch.zeros(
             (self.num_windows, self.num_channels,self.num_bins),dtype=torch.complex64
         ).to(self.device)
-        s_t = torch.randn(self.num_windows,self.num_grid_points, self.num_bins,dtype=torch.complex64).to(
+        s_t = 0*torch.randn(self.num_windows,self.num_grid_points, self.num_bins,dtype=torch.complex64).to(
             self.device
-        )
+        ) + 1e-6
         self.reconstruction_loss = self.reconstruction_loss.to(self.device)
         for iii in tqdm(range(int(iter))):
             grad_s = grad_dict(s_t, lagrange_multi_t)
