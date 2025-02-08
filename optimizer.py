@@ -21,7 +21,7 @@ class optimizer(nn.Module):
         super().__init__()
         self.device = device
         self.save_loss = save_loss
-        self.Y_p = Y_p.to(self.device)
+        self.Y_p = Y_p
         self.num_SH_coeff = Y_p.shape[1]
         self.num_grid_points = Y_p.shape[0]
         self.alpha = alpha
@@ -196,15 +196,15 @@ class optimizer(nn.Module):
 
     def optimize_v2(self, stft_anmt, iter=1e5,mask=None, mu=1e-1, ro=1e-2):
         def grad_dict(s_t, lagrange_multi_k):
-            grad = s_t[:,self.mask,:] / torch.sqrt(
-                1e-10 + torch.sum(s_t[:,self.mask,:] * torch.conj(s_t[:,self.mask,:]), dim=-1, keepdim=True)
+            grad = s_t / torch.sqrt(
+                1e-10 + torch.sum(s_t * torch.conj(s_t), dim=-1, keepdim=True)
             )
-            tmp_grad = torch.matmul(self.Y_p[self.mask,:], torch.complex(lagrange_multi_k[...,:self.num_bins],lagrange_multi_k[...,self.num_bins:]))
+            tmp_grad = torch.matmul(reduced_Yp, torch.complex(lagrange_multi_k[...,:self.num_bins],lagrange_multi_k[...,self.num_bins:]))
             grad += torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1)
             return grad
 
         def grad_lagrange_multi(s_t):
-            constraint_res = torch.matmul(self.Y_p[self.mask,:].t().conj(),torch.complex(s_t[:,self.mask,:self.num_bins],s_t[:,self.mask,self.num_bins:])) - torch.complex(stft_anmt[...,:self.num_bins],stft_anmt[...,self.num_bins:])
+            constraint_res = torch.matmul(reduced_Yp.t().conj(),torch.complex(s_t[...,:self.num_bins],s_t[...,self.num_bins:])) - torch.complex(stft_anmt[...,:self.num_bins],stft_anmt[...,self.num_bins:])
             return torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
 
         def loss_func(s_t):
@@ -229,16 +229,17 @@ class optimizer(nn.Module):
         # s_t = torch.cat((s_t.real,s_t.imag),dim=-1)
         s_t = 0 *torch.randn(
             self.num_windows,
-            self.num_grid_points,
+            len(self.mask),
             self.num_bins * 2,
             dtype=stft_anmt.dtype,
         ).to(self.device)
         self.reconstruction_loss = self.reconstruction_loss.to(self.device)
+        reduced_Yp = self.Y_p[self.mask,:].to(self.device)
         for iii in tqdm(range(int(iter))):
             grad_s = grad_dict(s_t, lagrange_multi_t)
             grad_lagrange = grad_lagrange_multi(s_t)
-            s_t[:,self.mask,:] -= mu * grad_s
-            energy = self.get_dict_energy(s_t)
+            s_t -= mu * grad_s
+            # energy = self.get_dict_energy(s_t)
             # s_t /= torch.sqrt(torch.sum(s_t**2)) + 1e-10
             lagrange_multi_t += ro * grad_lagrange
             self.reconstruction_loss = torch.cat(
@@ -246,7 +247,13 @@ class optimizer(nn.Module):
                 dim=0,
             )
         plt.plot(self.reconstruction_loss.cpu().detach())
-        return s_t
+        expanded_st = torch.zeros(self.num_windows,
+            self.num_grid_points,
+            self.num_bins * 2,
+            dtype=stft_anmt.dtype,)
+        expanded_st[:,self.mask,:] = s_t.cpu()
+
+        return expanded_st
 
     def optimize(self, Bk, itr=1e5, mask=None, D_prior=None, cheat=False):
         if isinstance(Bk, tuple):
