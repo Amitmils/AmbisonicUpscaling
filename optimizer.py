@@ -22,8 +22,8 @@ class optimizer(nn.Module):
         self.device = device
         self.save_loss = save_loss
         self.Y_p = Y_p.to(self.device)
-        self.num_SH_coeff = Y_p.shape[0]
-        self.num_grid_points = Y_p.shape[1]
+        self.num_SH_coeff = Y_p.shape[1]
+        self.num_grid_points = Y_p.shape[0]
         self.alpha = alpha
         self.dim_reduction = dim_reduction
         self.method = method
@@ -187,23 +187,36 @@ class optimizer(nn.Module):
         Omega_opt = torch.linalg.pinv(self.Y_p[:, self.mask]) @ self.Uk @ self.Lambda_k
         return Omega_opt
 
-    def optimize_v2(self, stft_anmt, iter=1e5, mu=1e-3, ro=1e-4):
+
+    def get_dict_energy(self,s_t):
+        squared_s_t = s_t**2
+        energy_per_bin_per_source = squared_s_t[:,:,:self.num_bins] + squared_s_t[:,:,self.num_bins:]
+        energy_per_bin_per_source=energy_per_bin_per_source/energy_per_bin_per_source.sum(-2,keepdim=True)
+        pass
+
+    def optimize_v2(self, stft_anmt, iter=1e5,mask=None, mu=1e-1, ro=1e-2):
         def grad_dict(s_t, lagrange_multi_k):
-            grad = s_t / torch.sqrt(
-                1e-10 + torch.sum(s_t * torch.conj(s_t), dim=-1, keepdim=True)
+            grad = s_t[:,self.mask,:] / torch.sqrt(
+                1e-10 + torch.sum(s_t[:,self.mask,:] * torch.conj(s_t[:,self.mask,:]), dim=-1, keepdim=True)
             )
-            tmp_grad = torch.matmul(self.Y_p.conj().t(), torch.complex(lagrange_multi_k[...,:self.num_bins],lagrange_multi_k[...,self.num_bins:]))
+            tmp_grad = torch.matmul(self.Y_p[self.mask,:], torch.complex(lagrange_multi_k[...,:self.num_bins],lagrange_multi_k[...,self.num_bins:]))
             grad += torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1)
             return grad
 
         def grad_lagrange_multi(s_t):
-            constraint_res = torch.matmul(self.Y_p,torch.complex(s_t[...,:self.num_bins],s_t[...,self.num_bins:])) - torch.complex(stft_anmt[...,:self.num_bins],stft_anmt[...,self.num_bins:])
+            constraint_res = torch.matmul(self.Y_p[self.mask,:].t().conj(),torch.complex(s_t[:,self.mask,:self.num_bins],s_t[:,self.mask,self.num_bins:])) - torch.complex(stft_anmt[...,:self.num_bins],stft_anmt[...,self.num_bins:])
             return torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
 
         def loss_func(s_t):
             return 10 * torch.log10(
-                torch.sum(torch.sqrt(torch.sum(s_t * torch.conj(s_t), dim=-1))) + 1e-10
+                torch.mean(torch.sum(torch.sqrt(torch.sum(s_t * torch.conj(s_t), dim=-1)),dim=-1)) + 1e-10
             )
+
+        if mask is None:
+            self.mask = torch.arange(self.num_grid_points).to(self.device)
+        else:
+            self.mask = mask
+
 
         # stft_anmt is (window,channels,bin) -->[#Windows,#Channels,#Bins *2 (Real,Imag)]
         self.num_windows, self.num_channels, self.num_bins = stft_anmt.shape
@@ -212,7 +225,9 @@ class optimizer(nn.Module):
             (self.num_windows, self.num_channels, self.num_bins * 2),
             dtype=stft_anmt.dtype,
         ).to(self.device)
-        s_t = torch.randn(
+        # s_t =  self.Y_p.unsqueeze(0) @ torch.complex(stft_anmt[...,:self.num_bins],stft_anmt[...,self.num_bins:])
+        # s_t = torch.cat((s_t.real,s_t.imag),dim=-1)
+        s_t = 0 *torch.randn(
             self.num_windows,
             self.num_grid_points,
             self.num_bins * 2,
@@ -222,7 +237,9 @@ class optimizer(nn.Module):
         for iii in tqdm(range(int(iter))):
             grad_s = grad_dict(s_t, lagrange_multi_t)
             grad_lagrange = grad_lagrange_multi(s_t)
-            s_t -= mu * grad_s
+            s_t[:,self.mask,:] -= mu * grad_s
+            energy = self.get_dict_energy(s_t)
+            # s_t /= torch.sqrt(torch.sum(s_t**2)) + 1e-10
             lagrange_multi_t += ro * grad_lagrange
             self.reconstruction_loss = torch.cat(
                 (self.reconstruction_loss, loss_func(s_t).unsqueeze(0)),

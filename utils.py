@@ -120,7 +120,7 @@ def create_sh_matrix(N, azi, zen, type="real"):
     """
     azi = azi.reshape(-1)
     zen = zen.reshape(-1)
-    return torch.tensor(spa.sph.sh_matrix(N_sph=N, azi=azi.cpu().numpy(), zen=zen.cpu().numpy(), sh_type=type).transpose())
+    return torch.tensor(spa.sph.sh_matrix(N_sph=N, azi=azi.cpu().numpy(), zen=zen.cpu().numpy(), sh_type=type))
 
 
 def fft_anm_t(anm_t, fs):
@@ -233,7 +233,7 @@ def encode_signal(
             window=window, 
             return_complex=True,
         )
-        encoded_signal = y.T.unsqueeze(1) * s_f  # Shape [#Channels , #FreqBands, #TimeFrames] TODO Batches
+        encoded_signal = y.T.conj().unsqueeze(1) * s_f  # Shape [#Channels , #FreqBands, #TimeFrames] TODO Batches
     else:
         encoded_signal = torch.matmul(s.reshape(-1, 1), y.reshape(1, -1))
     return encoded_signal, s, fs, y
