@@ -101,7 +101,7 @@ class SoundField:
 
 
 
-    def _build_joint_soundfield(self,order,SH_type,normalize_signals):
+    def _build_joint_soundfield(self,order,SH_type,n_fft,normalize_signals):
         max_length = 0
         self.anm_f_list = list()
         self.sources_coords = list()
@@ -114,6 +114,7 @@ class SoundField:
                 order,
                 plot=False,
                 type=SH_type,
+                n_fft = n_fft,
                 normalize_signal=normalize_signals,
             )
             num_frames = anm_f.shape[-1]
@@ -138,7 +139,8 @@ class SoundField:
         normalize_signals: bool = False,
         SH_type: str = "complex",
         grid_type: str = LEBEDEV,
-        debug=False,
+        n_fft: int = 1024,
+        debug : bool = False,
         sr: Optional[int] = -1,
     ) -> None:
         self.signals, self.sr = self._align_sr(signals, force_sr=sr)
@@ -148,8 +150,8 @@ class SoundField:
         self.output_order = output_order
 
 
-        total_anm_f_input_order = self._build_joint_soundfield(self.input_order,SH_type,normalize_signals)
-        total_anm_f_output_order = self._build_joint_soundfield(self.output_order,SH_type,normalize_signals)
+        total_anm_f_input_order = self._build_joint_soundfield(self.input_order,SH_type,n_fft,normalize_signals)
+        total_anm_f_output_order = self._build_joint_soundfield(self.output_order,SH_type,n_fft,normalize_signals)
 
         # total_anm_t = total_anm_t / torch.sqrt(torch.sum(total_anm_t ** 2))
         self.P_th, self.P_ph, self.num_grid_points = create_grid(grid_type)
