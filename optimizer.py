@@ -194,6 +194,97 @@ class optimizer(nn.Module):
         energy_per_bin_per_source=energy_per_bin_per_source/energy_per_bin_per_source.sum(-2,keepdim=True)
         pass
 
+    def optimize_v3(self, stft_anmt, iter=1e5,mask=None, mu=1e-1, ro=1e-2): #For paper version
+        def grad_dict(s_t, lagrange_multi_k):
+            grad = s_t / torch.sqrt(
+                1e-10 + torch.sum(s_t * torch.conj(s_t), dim=-1, keepdim=True)
+            )
+            tmp_grad = torch.matmul(reduced_Yp, torch.complex(lagrange_multi_k[...,:self.T],lagrange_multi_k[...,self.T:]))
+            grad += torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1)
+            return grad
+
+        def grad_lagrange_multi(s_t):
+            # original_signal = torch.complex(stft_anmt[...,:self.T],stft_anmt[...,self.T:])
+            # energy = torch.abs(original_signal).permute(2,1,0,3).reshape(4,513,-1)
+            # plt.figure()
+            # plt.imshow(10*torch.log10(energy[0].cpu().detach()))
+            # plt.show()
+            constraint_res = torch.matmul(reduced_Yp.t().conj(),torch.complex(s_t[...,:self.T],s_t[...,self.T:])) - torch.complex(stft_anmt[...,:self.T],stft_anmt[...,self.T:])
+            return torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
+
+        def loss_func(s_t):
+            return 10 * torch.log10(
+                torch.mean(torch.sum(torch.sqrt(torch.sum(s_t * torch.conj(s_t), dim=-1)),dim=-1)) + 1e-10
+            )
+
+        if mask is None:
+            self.mask = torch.arange(self.num_grid_points).to(self.device)
+        else:
+            self.mask = mask
+
+
+        self.T = 5
+        # stft_anmt is (window,channels,bin) -->[#Windows,#Channels,#Bins *2 (Real,Imag)]
+        self.num_windows, self.num_channels, self.num_bins = stft_anmt.shape
+        plt.figure()
+        org_energy = 10*torch.log10(torch.abs(stft_anmt[:,0,:].cpu().detach()))
+        plt.imshow(org_energy)
+        plt.title("Before")
+        if (self.num_windows%self.T) > 0:
+            stft_anmt = stft_anmt[:-(self.num_windows%self.T)]
+        self.num_windows = stft_anmt.shape[0]
+        stft_anmt_1 = stft_anmt.permute(2,1,0)
+        stft_anmt_2 = stft_anmt_1.reshape(self.num_bins,self.num_channels,-1,self.T).permute(2,0,1,3)
+        stft_anmt_3 = torch.cat((stft_anmt_2.real, stft_anmt_2.imag), dim=-1)
+
+        original_signal = torch.complex(stft_anmt_3[...,:self.T],stft_anmt_3[...,self.T:])
+        plt.figure()
+        new_energy = torch.abs(original_signal).permute(2,1,0,3).reshape(4,513,-1)[0].t()
+        plt.imshow(10*torch.log10(new_energy.cpu().detach()))
+        plt.title("After")
+        stft_anmt = stft_anmt_3
+
+        self.N = stft_anmt.shape[0]
+        lagrange_multi_t = torch.zeros(
+            (stft_anmt.shape),
+            dtype=stft_anmt.dtype,
+        ).to(self.device)
+        s_t = 0 *torch.randn(
+            self.N,
+            self.num_bins,
+            len(self.mask),
+            self.T * 2,
+            dtype=stft_anmt.dtype,
+        ).to(self.device)
+        self.reconstruction_loss = self.reconstruction_loss.to(self.device)
+        reduced_Yp = self.Y_p[self.mask,:].to(self.device)
+        for iii in tqdm(range(int(iter))):
+            grad_s = grad_dict(s_t, lagrange_multi_t)
+            grad_lagrange = grad_lagrange_multi(s_t)
+            s_t -= mu * grad_s
+            # energy = self.get_dict_energy(s_t)
+            # s_t /= torch.sqrt(torch.sum(s_t**2)) + 1e-10
+            lagrange_multi_t += ro * grad_lagrange
+            self.reconstruction_loss = torch.cat(
+                (self.reconstruction_loss, loss_func(s_t).unsqueeze(0)),
+                dim=0,
+            )
+        plt.figure()
+        plt.plot(self.reconstruction_loss.cpu().detach())
+        expanded_st = torch.zeros(self.num_windows,
+            self.num_grid_points,
+            self.num_bins * 2,
+            dtype=stft_anmt.dtype,)
+        #go for certainty:
+        tmp = s_t.cpu()
+        tmp = torch.complex(tmp[...,:self.T],tmp[...,self.T:]).permute(2,1,0,3).reshape(len(self.mask),self.num_bins,-1).permute(2,0,1)
+        tmp = torch.cat((tmp.real,tmp.imag),dim=-1)
+        expanded_st[:,self.mask,:] = tmp
+
+        return expanded_st
+
+
+
     def optimize_v2(self, stft_anmt, iter=1e5,mask=None, mu=1e-1, ro=1e-2):
         def grad_dict(s_t, lagrange_multi_k):
             grad = s_t / torch.sqrt(

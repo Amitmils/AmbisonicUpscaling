@@ -241,11 +241,16 @@ class SoundField:
         iter=1e5,
         mu = 1e-3,
         ro = 1e-2,
+        v : int = 2,
         multi_processing: bool = True,
         save=False,
     ):
         num_windows,num_channels,num_bins = stft_anmt.shape
-        self.sparse_stft_dict = opt.optimize_v2(stft_anmt.to(self.device), iter,mask = mask,mu = mu, ro=ro)
+        if v == 2:
+            self.sparse_stft_dict = opt.optimize_v2(stft_anmt.to(self.device), iter,mask = mask,mu = mu, ro=ro)
+        elif v==3:
+            self.sparse_stft_dict = opt.optimize_v3(stft_anmt.to(self.device), iter,mask = mask,mu = mu, ro=ro)
+
         return self.sparse_stft_dict
 
     def get_sparse_dict_v2(
