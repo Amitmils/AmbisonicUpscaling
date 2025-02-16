@@ -17,7 +17,6 @@ class optimizer(nn.Module):
         dim_reduction=True,
         constraint_tol=0,
         save_loss=False,
-        mag_constraint = False,
         method="GD_lagrange_multi",
         device="cpu",
     ):
@@ -34,7 +33,6 @@ class optimizer(nn.Module):
         self.reconstruction_loss = torch.tensor([]).to(self.device)
         self.P_th = P_th
         self.P_ph = P_ph
-        self.mag_constraint = mag_constraint
 
     def GD_Deep(self, num_iterations: int):
         def init_para():
@@ -96,12 +94,9 @@ class optimizer(nn.Module):
     def optimize(self, stft_anmt, iter=1e5,mask=None, mu=1e-1, ro=1e-2, gt_stft_anmt = None,gt_sparse= None): #For paper version
         def grad_dict(s_t, lagrange_multi_k):
             grad = l12_grad(s_t)
-            if self.mag_constraint:
-                tmp_grad = torch.matmul(reduced_Yp, lagrange_multi_k.to(torch.complex64) )  # No complex conversion
-                grad += tmp_grad * (s_t / (torch.abs(s_t) + 1e-10))  # Chain rule for magnitude
-            else:
-                tmp_grad = torch.matmul(reduced_Yp, torch.complex(lagrange_multi_k[...,:self.T],lagrange_multi_k[...,self.T:]))
-                grad += torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1)
+
+            tmp_grad = torch.matmul(reduced_Yp, torch.complex(lagrange_multi_k[...,:self.T],lagrange_multi_k[...,self.T:]))
+            grad += torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1)
             return grad
         
         def l12_grad(s_t):
@@ -111,14 +106,8 @@ class optimizer(nn.Module):
             return grad
 
         def reconstruction_residue(s_t):
-            if self.mag_constraint:
-                constraint_res = (
-                torch.abs(torch.matmul(reduced_Yp.t().conj(), torch.complex(s_t[..., :self.T], s_t[..., self.T:]))) -
-                torch.abs(torch.complex(stft_anmt[..., :self.T], stft_anmt[..., self.T:]))
-                )
-            else:
-                constraint_res = torch.matmul(reduced_Yp.t().conj(),torch.complex(s_t[...,:self.T],s_t[...,self.T:])) - torch.complex(stft_anmt[...,:self.T],stft_anmt[...,self.T:])
-                constraint_res = torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
+            constraint_res = torch.matmul(reduced_Yp.t().conj(),torch.complex(s_t[...,:self.T],s_t[...,self.T:])) - torch.complex(stft_anmt[...,:self.T],stft_anmt[...,self.T:])
+            constraint_res = torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
             return constraint_res
         
         def up_scaled_loss(gt_stft_anmt):
