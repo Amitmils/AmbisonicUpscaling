@@ -242,92 +242,17 @@ class SoundField:
         mu = 1e-3,
         ro = 1e-2,
         v : int = 2,
-        multi_processing: bool = True,
+        T : int = 5,
         save=False,
+        gt_stft_anmt = None,
+        gt_sparse= None,
     ):
         num_windows,num_channels,num_bins = stft_anmt.shape
-        if v == 2:
-            self.sparse_stft_dict = opt.optimize_v2(stft_anmt.to(self.device), iter,mask = mask,mu = mu, ro=ro)
-        elif v==3:
-            self.sparse_stft_dict = opt.optimize_v3(stft_anmt.to(self.device), iter,mask = mask,mu = mu, ro=ro)
+        opt.T = T
 
+        self.sparse_stft_dict = opt.optimize(stft_anmt = stft_anmt.to(self.device),iter= iter,mask = mask,mu = mu, ro=ro,gt_stft_anmt = gt_stft_anmt,gt_sparse= gt_sparse)
+        
         return self.sparse_stft_dict
-
-    def get_sparse_dict_v2(
-        self,
-        windowed_anm_t: torch.tensor,
-        opt: optimizer,
-        mask=None,
-        iter=1e5,
-        multi_processing: bool = True,
-        save=False,
-    ):
-        Bk_matrix = windowed_anm_t.permute(
-            0, 1, 3, 2
-        )  # turn to (window,band,SH_coeff,time)
-        if mask is not None:
-            mask_matrix = mask[None, None, ...]
-        else:
-            mask_matrix = None
-        self.sparse_dict_subbands, Dk = opt.optimize(
-            Bk_matrix, itr=iter, mask=mask_matrix, D_prior=None
-        )
-        self.s_windowed = torch.sum(self.sparse_dict_subbands, axis=1)
-        self.s_dict = self.s_windowed.permute(1, 0, 2).reshape(
-            self.num_grid_points, self.window_length * self.num_windows
-        )
-        if save:
-            try:
-                self.save_sound_field("data/output")
-            except:
-                print("Saving Failed")
-        return self.sparse_dict_subbands, self.s_windowed, self.s_dict
-
-    def get_sparse_dict(self, opt: optimizer, mask=None, multi_processing: bool = True):
-        spare_dict_subbands = torch.zeros(
-            (self.num_windows, self.num_bins, self.num_grid_points, self.window_length)
-        )
-        if multi_processing:
-            print("Multi Processing")
-            args = [
-                (self.windowed_anm_t[window, band, :, :].T[None, None, ...], mask, None)
-                for window in range(self.num_windows)
-                for band in range(self.num_bins)
-            ]
-            with mp.Pool(processes=mp.cpu_count()) as pool:
-                results = []
-                with tqdm(total=len(args)) as pbar:
-                    for result in pool.imap(opt.optimize, args):
-                        results.append(result)
-                        pbar.update()
-                for i, (s_subband, Dk) in enumerate(results):
-                    window = i // self.num_bins
-                    band = i % self.num_bins
-                    spare_dict_subbands[window, band, :, :] = s_subband
-        else:
-            # Create a single progress bar for the outer loop (bands)
-            outer_bar = tqdm(total=self.num_bins, desc="Bands", position=0, leave=True)
-            for band in range(self.num_bins):
-                outer_bar.set_postfix(
-                    {"Current Band": band}
-                )  # Update current band in the outer bar
-                inner_bar = tqdm(
-                    total=self.num_windows, desc="Windows", position=1, leave=False
-                )  # Inner bar for windows
-                for window in range(self.num_windows):
-                    Bk = self.windowed_anm_t[window, band, :, :].T
-                    spare_dict_subbands[window, band, :, :], Dk = opt.optimize(
-                        Bk, mask, D_prior=None
-                    )
-                    inner_bar.update(1)  # Update inner progress bar
-                inner_bar.close()  # Close the inner progress bar after finishing the inner loop
-                outer_bar.update(1)  # Update outer progress bar
-
-        self.sparse_dict_subbands = spare_dict_subbands
-        self.s_windowed = torch.sum(self.sparse_dict_subbands, axis=1)
-        self.s_dict = self.s_windowed.permute(1, 0, 2).reshape(
-            self.num_grid_points, self.window_length * self.num_windows
-        )
 
     def plot_sparse_dict(self, s_dict, sample_idx: int):
         if s_dict.dim() == 4:
