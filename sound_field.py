@@ -12,7 +12,8 @@ from signal_info import signal_info
 from optimizer import optimizer
 import sounddevice as sd
 from torch.utils.data import Dataset
-
+from scipy.io import loadmat
+import matplotlib.pyplot as plt
 
 LEBEDEV_GRID_PATH = "Lebvedev2702.mat"
 LEBEDEV = "lebedev"
@@ -99,8 +100,6 @@ class SoundField:
     def __init__(self, device: torch.device = torch.device("cpu")) -> None:
         self.device = device
 
-
-
     def _build_joint_soundfield(self,order,SH_type,n_fft,normalize_signals):
         max_length = 0
         self.anm_f_list = list()
@@ -130,7 +129,75 @@ class SoundField:
                 (0, max_length - num_frames),
             )
 
+        
+
         return total_anm_f
+
+    def load(
+        self,
+        file_path: str,
+        n_fft: int = 1024,
+        grid_type: str = LEBEDEV,
+        SH_type: str = "complex",
+        debug: bool = False,
+        t : int = 10,
+    ) -> None:
+        
+        data = loadmat(file_path)
+        anm_t_list = data['anm_t_list'].squeeze()
+        self.sr = data['fs'].item()
+        self.P_th, self.P_ph, self.num_grid_points = create_grid(grid_type)
+        self.has_mask = False
+        self.sources_coords = [[math.degrees(data['src_theta']),math.degrees(data['src_phi'])]]
+        hop_length = n_fft//2   # Hop length (stride)
+        win_length = n_fft   # Window length
+
+        self.anm_f_dict = dict()
+        for i in range(len(anm_t_list)):
+            anm_t = torch.tensor(anm_t_list[i]).to(torch.float32)
+            order = torch.sqrt(torch.tensor(anm_t.shape[-1])).to(int) - 1
+            Y_p = utils.create_sh_matrix(
+                order, zen=self.P_th, azi=self.P_ph, type='real'
+            )
+            projected_values = (Y_p @ anm_t[t])
+            utils.plot_on_2D(
+                azi=self.P_ph,
+                zen=self.P_th,
+                values=projected_values,
+                title=f"Encoded Signal N={order}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
+            )
+            # column wise STFT (channels)
+            anm_f = torch.stft(anm_t.t(),#torch.sum(anm_f, dim=1).t(),
+                n_fft=n_fft,
+                hop_length= hop_length,
+                win_length=win_length,
+                window = torch.hann_window(win_length),
+                return_complex=True,
+                )
+            plt.figure()
+            plt.plot((torch.abs(anm_f[0])**2).sum(1))
+            self.anm_f_dict[order] = anm_f
+        self.input_order = min(self.anm_f_dict.keys())
+        self.output_order = max(self.anm_f_dict.keys())
+        anm_f_input_order =  self.anm_f_dict[self.input_order]
+        anm_f_output_order = self.anm_f_dict[self.output_order]
+
+        if debug:
+            # project first time sample on 162 points
+            for order,anm_f in zip([self.input_order,self.output_order],[anm_f_input_order,anm_f_output_order]):
+                t = 10
+                Y_p = utils.create_sh_matrix(
+                    order, zen=self.P_th, azi=self.P_ph, type=SH_type
+                )
+                projected_values = (torch.abs((Y_p @ anm_f[:,:,t] ))**2).sum(dim=1)
+                utils.plot_on_2D(
+                    azi=self.P_ph,
+                    zen=self.P_th,
+                    values=projected_values,
+                    title=f"Encoded Signal N={order}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
+                )
+        return anm_f_input_order,anm_f_output_order
+
     def create(
         self,
         signals: List[signal_info],
@@ -144,11 +211,10 @@ class SoundField:
         sr: Optional[int] = -1,
     ) -> None:
         self.signals, self.sr = self._align_sr(signals, force_sr=sr)
-        
+
         self.has_mask = False
         self.input_order = input_order
         self.output_order = output_order
-
 
         total_anm_f_input_order = self._build_joint_soundfield(self.input_order,SH_type,n_fft,normalize_signals)
         total_anm_f_output_order = self._build_joint_soundfield(self.output_order,SH_type,n_fft,normalize_signals)
@@ -251,7 +317,7 @@ class SoundField:
         opt.T = T
 
         self.sparse_stft_dict = opt.optimize(stft_anmt = stft_anmt.to(self.device),iter= iter,mask = mask,mu = mu, ro=ro,gt_stft_anmt = gt_stft_anmt,gt_sparse= gt_sparse)
-        
+
         return self.sparse_stft_dict
 
     def plot_sparse_dict(self, s_dict, sample_idx: int):
@@ -267,7 +333,6 @@ class SoundField:
             title=f"Sparse Dict t={sample_idx}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
         )
 
-
     def play_sparse_stft_sound_field(
             self,
             theta: float,
@@ -277,34 +342,34 @@ class SoundField:
             window: Union[int, None] = None,
             bin: Union[int, None] = None,
         ):
-            # sound should be (num_grid_points,time samples)
-            num_windows,num_grid_points,num_bins = self.sparse_stft_dict.shape
-            num_bins = num_bins//2
-            complex_sparse_stft_dict = torch.complex(self.sparse_stft_dict[...,:num_bins],self.sparse_stft_dict[...,num_bins:])
-            mirror_part = torch.conj(complex_sparse_stft_dict[..., 1:-1].flip(dims=[-1]))
-            full_spectrum = torch.cat([complex_sparse_stft_dict, mirror_part], dim=-1)
-            sparse_time_dict = torch.fft.ifft(full_spectrum, dim=-1).real
-            sound = sparse_time_dict.reshape(num_windows,num_grid_points*num_bins*2)
+        # sound should be (num_grid_points,time samples)
+        num_windows,num_grid_points,num_bins = self.sparse_stft_dict.shape
+        num_bins = num_bins//2
+        complex_sparse_stft_dict = torch.complex(self.sparse_stft_dict[...,:num_bins],self.sparse_stft_dict[...,num_bins:])
+        mirror_part = torch.conj(complex_sparse_stft_dict[..., 1:-1].flip(dims=[-1]))
+        full_spectrum = torch.cat([complex_sparse_stft_dict, mirror_part], dim=-1)
+        sparse_time_dict = torch.fft.ifft(full_spectrum, dim=-1).real
+        sound = sparse_time_dict.reshape(num_windows,num_grid_points*num_bins*2)
 
-            grid_in_degress = torch.stack((self.P_ph, self.P_th)).T * 180 / torch.pi
-            target_in_degress = torch.tensor([phi, theta]).reshape(1, -1)
-            relevant_grid_points = (
+        grid_in_degress = torch.stack((self.P_ph, self.P_th)).T * 180 / torch.pi
+        target_in_degress = torch.tensor([phi, theta]).reshape(1, -1)
+        relevant_grid_points = (
                 (torch.norm(grid_in_degress - target_in_degress, p=2, dim=1) < radius)
                 .nonzero()
                 .flatten()
             )
 
-            if len(relevant_grid_points) > 0:
-                print("## Playing Directions ##")
-                for i in relevant_grid_points:
-                    print(f"Theta = {grid_in_degress[i,0]}, Phi = {grid_in_degress[i,1]}")
-            else:
-                print("No directions found")
-                return
+        if len(relevant_grid_points) > 0:
+            print("## Playing Directions ##")
+            for i in relevant_grid_points:
+                print(f"Theta = {grid_in_degress[i,0]}, Phi = {grid_in_degress[i,1]}")
+        else:
+            print("No directions found")
+            return
 
-            signal = torch.sum(sound[relevant_grid_points, :], axis=0)
-            sd.play(signal.cpu().numpy(), self.sr)
-    
+        signal = torch.sum(sound[relevant_grid_points, :], axis=0)
+        sd.play(signal.cpu().numpy(), self.sr)
+
     def play_sparse_sound_field(
         self,
         theta: float,
