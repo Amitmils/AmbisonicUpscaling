@@ -202,7 +202,6 @@ def encode_signal(
     type="complex",
     n_fft :int  = 1024,        # Number of FFT points
     plot=False,
-    normalize_signal=True,
 ):
 
     try:
@@ -212,8 +211,7 @@ def encode_signal(
         ph = signal.ph
     except:
         raise f"signal must be of type signal_info"
-    if normalize_signal:
-        s = s / torch.sqrt(torch.mean(s**2))
+
     y = torch.tensor(spa.sph.sh_matrix(N_sph=sh_order, azi=ph, zen=th, sh_type=type))
 
     if plot:

@@ -14,6 +14,10 @@ import sounddevice as sd
 from torch.utils.data import Dataset
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
+import pandas as pd
+import ast
+import zipfile
+
 
 LEBEDEV_GRID_PATH = "Lebvedev2702.mat"
 LEBEDEV = "lebedev"
@@ -97,8 +101,9 @@ def divide_to_time_windows(
 
 
 class SoundField:
-    def __init__(self, device: torch.device = torch.device("cpu")) -> None:
+    def __init__(self, device: torch.device = torch.device("cpu"),maximum_seconds = 5) -> None:
         self.device = device
+        self.maximum_seconds = maximum_seconds
 
     def _build_joint_soundfield(self,order,SH_type,n_fft,normalize_signals):
         max_length = 0
@@ -114,26 +119,67 @@ class SoundField:
                 plot=False,
                 type=SH_type,
                 n_fft = n_fft,
-                normalize_signal=normalize_signals,
             )
             num_frames = anm_f.shape[-1]
             max_length = max(max_length, anm_f.shape[-1])
             self.anm_f_list.append(anm_f)
 
         # combine all signals
-        total_anm_f = torch.zeros((tuple((self.anm_f_list[0].shape[:-1])) + (max_length,)),dtype=self.anm_f_list[0].dtype)
+        max_frames = int(2*(self.maximum_seconds * self.sr)/n_fft) # seconds * sr / (nfft/2)  --> Assumees 50% overlap
+        max_length = min(max_length,max_frames)
+        total_anm_f = torch.zeros(((order+1)**2,n_fft//2 +1,max_length),dtype=self.anm_f_list[0].dtype)
         for i in range(len(self.anm_f_list)):
             num_frames = self.anm_f_list[i].shape[-1]
-            total_anm_f += torch.nn.functional.pad(
-                self.anm_f_list[i],
-                (0, max_length - num_frames),
-            )
+            if num_frames < max_length:
+                total_anm_f += torch.nn.functional.pad(
+                    self.anm_f_list[i],
+                    (0, max_length - num_frames),
+                )
+            else:
+                total_anm_f += self.anm_f_list[i][...,:max_length]
 
-        
+        if normalize_signals:
+            energy= (torch.abs(total_anm_f)**2).sum().sqrt() + 1e-8
+            total_anm_f /= energy
 
         return total_anm_f
 
-    def load(
+    def load(self,
+             anm_f_input,
+             anm_f_output,
+             csv_meta_data_path :str,
+             id : int,
+             debug : bool = True,
+             SH_type: str = "complex",
+             grid_type: str = LEBEDEV):
+        meta_data = pd.read_csv(csv_meta_data_path)
+        audio_meta_data = meta_data.loc[id]
+        self.sr = audio_meta_data['sr']
+        self.P_th, self.P_ph, self.num_grid_points = create_grid(grid_type)
+        self.sources_coords = ast.literal_eval(audio_meta_data['DOAs'])
+        self.input_order = int(math.sqrt(anm_f_input.shape[0])-1)
+        self.output_order = int(math.sqrt(anm_f_output.shape[0])-1)
+
+
+        if debug:
+            # project first time sample on 162 points
+            for order,anm_f in zip([self.input_order,self.output_order],[anm_f_input,anm_f_output]):
+                t = 10
+                Y_p = utils.create_sh_matrix(
+                    order, zen=self.P_th, azi=self.P_ph, type=SH_type
+                )
+                projected_values = (torch.abs((Y_p @ anm_f[:,:,t] ))**2).sum(dim=1)
+                utils.plot_on_2D(
+                    azi=self.P_ph,
+                    zen=self.P_th,
+                    values=projected_values,
+                    title=f"Encoded Signal N={order}\n$(\\theta,\\phi)$ := {[tuple((round(th),round(phi))) for (th,phi) in self.sources_coords]}",
+                )
+
+        
+
+
+    def load_matlab(
         self,
         file_path: str,
         n_fft: int = 1024,
@@ -304,20 +350,13 @@ class SoundField:
         stft_anmt: torch.tensor,
         opt: optimizer,
         mask=None,
-        iter=1e5,
-        mu = 1e-3,
-        ro = 1e-2,
-        v : int = 2,
-        T : int = 5,
         save=False,
         gt_stft_anmt = None,
         gt_sparse= None,
     ):
-        num_windows,num_channels,num_bins = stft_anmt.shape
-        opt.T = T
-
-        self.sparse_stft_dict = opt.optimize(stft_anmt = stft_anmt.to(self.device),iter= iter,mask = mask,mu = mu, ro=ro,gt_stft_anmt = gt_stft_anmt,gt_sparse= gt_sparse)
-
+        
+        opt.init(stft_anmt,gt_stft_anmt)
+        self.sparse_stft_dict = opt()
         return self.sparse_stft_dict
 
     def plot_sparse_dict(self, s_dict, sample_idx: int):
@@ -432,15 +471,24 @@ class SoundField:
 
 
 class SoundFieldDataset(Dataset):
-    def __init__(self, data: dict, device: str = "cpu") -> None:
-        super().__init__()
-        self.data = data["data"]
-        self.device = device
-        for key, value in data["config"].items():
-            setattr(self, key, value)
+    def __init__(self, folder_path : str, dataset_type : str, input_order : bool = 1 , output_order : bool = 3):
+        self.zip_path = os.path.join(folder_path,dataset_type + ".zip")
+        self.dataset_type = dataset_type
+        self.meta_data = pd.read_csv(os.path.join(folder_path,'metadata.csv')).query('type == @self.dataset_type')
+        self.base_id = self.meta_data.iloc[0]['ID'] #there is an offset for each data type
+        self.sr = self.meta_data.iloc[0].sr #assume all have the same SR
+        self.input_order = input_order
+        self.output_order = output_order
 
     def __len__(self):
-        return len(self.data)
+        # Return the number of samples stored in the zip file
+        with zipfile.ZipFile(self.zip_path, 'r') as zipf:
+            return len([name for name in zipf.namelist() if name.startswith(self.dataset_type)])
 
-    def __getitem__(self, idx):
-        return self.data[idx][0].to(self.device), self.data[idx][1].to(self.device), idx
+    def __getitem__(self, local_id):
+    # Lazy load each sample from the zip file
+        with zipfile.ZipFile(self.zip_path, 'r') as zipf:
+            with zipf.open(f"{self.dataset_type}_{self.base_id + local_id}.pth") as f:
+                # self.base_id + local_id = global_id
+                global_id, anm_f_input_order, anm_f_output_order = torch.load(f,weights_only=False)
+        return global_id, anm_f_input_order, anm_f_output_order
