@@ -491,4 +491,4 @@ class SoundFieldDataset(Dataset):
             with zipf.open(f"{self.dataset_type}_{self.base_id + local_id}.pth") as f:
                 # self.base_id + local_id = global_id
                 global_id, anm_f_input_order, anm_f_output_order = torch.load(f,weights_only=False)
-        return global_id, anm_f_input_order, anm_f_output_order
+        return global_id, anm_f_input_order.permute(-1,0,1), anm_f_output_order.permute(-1,0,1) #TODO just save it the correct permute when making dataset

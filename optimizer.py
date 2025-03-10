@@ -19,6 +19,7 @@ class optimizer(nn.Module):
         dim_reduction=True,
         constraint_tol=0,
         num_freq_bins : int = 129,
+        num_iters : int = 1e4,
         T : int = 10,
         mu : float = 1e-2,
         ro : float = 1e-3,
@@ -45,13 +46,31 @@ class optimizer(nn.Module):
         self.num_freq_bins = num_freq_bins
         self.hyper_parameters = hyper_parameters
         self.version = version
+        self.num_iters = num_iters
         self.init_mu = mu
         self.init_ro = ro
+
+        self.HP_model = HPNet(
+            self.hyper_parameters,
+            self.num_grid_points,
+            self.num_iters,
+            self.num_freq_bins,
+            self.T,
+            self.ambi_channels,
+            self.init_mu,
+            self.init_ro,
+            self.version,
+        ).to(self.device)
         print(f"Optimization Method : {self.opt_method} ")
 
-
-
-    def init(self, stft_anmt,gt_stft_anmt = None, mask = None):
+    def batch_preprocess(
+        self,
+        stft_anmt,
+        gt_stft_anmt=None,
+        mask=None,
+        init_s_t: Optional[torch.tensor] = None,
+        init_lagrange_multi: Optional[torch.tensor] = None,
+    ):
 
         if mask is None:
             self.mask = torch.arange(self.num_grid_points).to(self.device)
@@ -70,7 +89,6 @@ class optimizer(nn.Module):
         # energy= (torch.abs(complex_input_order)**2).sum().sqrt() + 1e-8# torch.norm(complex_gt_stft_anmt,p=2,dim=-1,keepdim=True).sum(1,keepdim=True) + 1e-8
         # complex_input_order /= energy
 
-    
         self.N = self.stft_anmt.shape[-4]
         if gt_stft_anmt is not None:
             self.gt_stft_anmt = self.reshape_stft(gt_stft_anmt).to(self.device)
@@ -82,13 +100,17 @@ class optimizer(nn.Module):
             self.gt_stft_anmt = None
             self.complex_gt_stft_anmt = None
 
+        if init_lagrange_multi is not None:
+            self.lagrange_multi_t = init_lagrange_multi.to(self.device)
+        else:
+            self.lagrange_multi_t = torch.zeros(
+                (self.stft_anmt.shape),
+                dtype=self.stft_anmt.dtype,
+            ).to(self.device)
 
-        self.lagrange_multi_t = torch.zeros(
-            (self.stft_anmt.shape),
-            dtype=self.stft_anmt.dtype,
-        ).to(self.device)
-
-        if self.stft_anmt.dim() == 5:
+        if init_s_t is not None:
+            self.s_t = init_s_t.to(self.device)
+        else:
             self.s_t = torch.zeros(
                 self.stft_anmt.shape[0], # num batches
                 self.N,
@@ -97,28 +119,6 @@ class optimizer(nn.Module):
                 self.T * 2,
                 dtype=self.stft_anmt.dtype,
             ).to(self.device)
-        else:
-             self.s_t = torch.zeros(
-                self.N,
-                self.num_bins,
-                len(self.mask),
-                self.T * 2,
-                dtype=self.stft_anmt.dtype,
-            ).to(self.device)
-
-        self.HP_model = HPNet(
-            self.hyper_parameters,
-            self.num_grid_points,
-            self.num_iters,
-            self.num_freq_bins,
-            self.T,
-            self.ambi_channels,
-            self.init_mu,
-            self.init_ro,
-            self.version,
-        ).to(self.device)
-
-
 
     def reshape_stft(self,stft_anmt):
         if stft_anmt.dim() == 4:
@@ -138,7 +138,6 @@ class optimizer(nn.Module):
 
         return stft_anmt_3
 
-
     def grad_dict(self,recon_residue=None):
         grad = self.l12_grad()
 
@@ -151,19 +150,18 @@ class optimizer(nn.Module):
             grad += ro * 2 * torch.cat((penalty_term.real,penalty_term.imag),dim=-1) 
 
         return grad
-    
+
     def l12_grad(self):
         grad = self.s_t / torch.sqrt(
             1e-10 + torch.sum(self.s_t * torch.conj(self.s_t), dim=-1, keepdim=True)
         )
         return grad
-    
+
     def reconstruction_residue(self):
         complex_input_order_est = torch.matmul(self.reduced_Yp.t().conj(),torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
         constraint_res = complex_input_order_est - self.complex_input_order
         constraint_res = torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
         return constraint_res,complex_input_order_est
-
 
     def input_order_loss(self,complex_input_order_est):
         denom = torch.norm(self.complex_input_order, p=2, dim = (-2,-1))**2
@@ -185,13 +183,12 @@ class optimizer(nn.Module):
             return loss_dB
         else:
             return loss
-    
+
     def l12_loss(self):
         return 10 * torch.log10(
             torch.mean(torch.sum(torch.sqrt(torch.sum(self.s_t * torch.conj(self.s_t), dim=-1)),dim=-1)) + 1e-10
         )
 
-    
     def forward(self,iter_num : int, log_losses_per_iter : bool = True):
 
         if self.opt_method == "GD_lagrange_multi":
@@ -214,7 +211,6 @@ class optimizer(nn.Module):
             grad_s = 2*torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1) + ro*self.l12_grad()
             self.s_t -= mu * grad_s
 
-
         if log_losses_per_iter: #currently, dont keep track if we are not about to plot - and we only plot when we have batch = 1 (code doesnt handle multiple batches)
             self.L12_loss = torch.cat(
                 (self.L12_loss, self.l12_loss().unsqueeze(0)/self.N),
@@ -229,11 +225,13 @@ class optimizer(nn.Module):
                 (self.gt_upscale_loss,self.upscaled_loss(loss_in_dB=True))
             )
 
-    def get_st(self):
+    def get_current_state(self,return_device : Optional[str] = None):
+        if return_device is None:
+            return_device = self.device            
         if self.num_grid_points == len(self.mask):
-            return self.s_t
+            return self.s_t.to(return_device),self.lagrange_multi_t.to(return_device)
         else:
-            #We were using a mask, so expand the dictionary back
+            # We were using a mask, so expand the dictionary back
             expanded_st = torch.zeros(self.num_windows,
                 self.num_grid_points,
                 self.num_bins * 2,
@@ -241,9 +239,7 @@ class optimizer(nn.Module):
             tmp = torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]).permute(2,1,0,3).reshape(len(self.mask),self.num_bins,-1).permute(2,0,1)
             tmp = torch.cat((tmp.real,tmp.imag),dim=-1)
             expanded_st[:,self.mask,:] = tmp
-            return expanded_st
-            
-
+        return expanded_st.to(return_device),self.lagrange_multi_t.to(return_device)
 
     def plot_losses_per_iter(self,mu : Optional[float] = None, ro : Optional[float] = None ,from_iter : int = 0 ):
         tit = ""
