@@ -51,10 +51,8 @@ class HPNet(nn.Module):
 
     def forward(self,iter):
         if self.mode == 'classic':
-            if self.mu.shape[0] == 1:
-                return  self.mu,self.ro
-            else:
-                return  self.mu[iter],self.ro[iter]
+            return  self.mu,self.ro
+
 
         if self.mode == 'DU_simple':
             
