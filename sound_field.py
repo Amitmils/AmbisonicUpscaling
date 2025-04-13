@@ -113,7 +113,7 @@ class SoundField:
             self.sources_coords.append(
                 (math.degrees(curr_sig.th), math.degrees(curr_sig.ph))
             )
-            anm_f, _, _, y = utils.encode_signal(
+            anm_f, s_f, _, y = utils.encode_signal(
                 curr_sig,
                 order,
                 plot=False,

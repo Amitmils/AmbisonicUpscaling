@@ -49,7 +49,13 @@ class optimizer(nn.Module):
         self.num_iters = num_iters
         self.init_mu = mu
         self.init_ro = ro
+        self.init_model()
 
+    
+
+        print(f"Optimization Method : {self.opt_method} ")
+
+    def init_model(self):
         self.HP_model = HPNet(
             self.hyper_parameters,
             self.num_grid_points,
@@ -61,7 +67,7 @@ class optimizer(nn.Module):
             self.init_ro,
             self.version,
         ).to(self.device)
-        print(f"Optimization Method : {self.opt_method} ")
+
 
     def batch_preprocess(
         self,
@@ -120,6 +126,8 @@ class optimizer(nn.Module):
                 dtype=self.stft_anmt.dtype,
             ).to(self.device)
 
+        self.v = 0 #momentum
+
     def reshape_stft(self,stft_anmt):
         if stft_anmt.dim() == 4:
             batches = stft_anmt.shape[0]
@@ -158,72 +166,81 @@ class optimizer(nn.Module):
         return grad
 
     def reconstruction_residue(self):
-        complex_input_order_est = torch.matmul(self.reduced_Yp.t().conj(),torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
-        constraint_res = complex_input_order_est - self.complex_input_order
+        self.complex_input_order_est = torch.matmul(self.reduced_Yp.t().conj(),torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
+        constraint_res = self.complex_input_order_est - self.complex_input_order
         constraint_res = torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
-        return constraint_res,complex_input_order_est
+        return constraint_res
 
-    def input_order_loss(self,complex_input_order_est):
+    def input_order_loss(self,loss_in_dB : bool = False):
         denom = torch.norm(self.complex_input_order, p=2, dim = (-2,-1))**2
-        nom = torch.norm(complex_input_order_est - self.complex_input_order, p=2, dim = (-2,-1))**2
+        nom = torch.norm(self.complex_input_order_est - self.complex_input_order, p=2, dim = (-2,-1))**2
         loss = (nom).mean()
-        log_loss = 10*torch.log10(loss).unsqueeze(0)
-        return log_loss
+        if loss_in_dB:
+            return 10*torch.log10(loss).unsqueeze(0)
+        else:
+            return loss.unsqueeze(0)
 
-    def upscaled_loss(self,loss_in_dB : bool = False):
+    def upscaled_loss(self,loss_in_dB : bool = False,p=2, s_t = None):
         if  self.complex_gt_stft_anmt is None:
             return None
-        upscaled_est = torch.matmul(self.reduced_upscaled_Yp.t().conj(),torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
-        constraint_res = upscaled_est - self.complex_gt_stft_anmt
+        if s_t is None:
+            s_t = self.s_t
+        self.upscaled_est = torch.matmul(self.reduced_upscaled_Yp.t().conj(),torch.complex(s_t[...,:self.T],s_t[...,self.T:]))
+        constraint_res = self.upscaled_est - self.complex_gt_stft_anmt
         denom = torch.norm(self.complex_gt_stft_anmt, p=2, dim = (-2,-1))**2
-        nom = torch.norm(constraint_res, p=2, dim = (-2,-1))**2
+        nom = torch.norm(constraint_res, p=p, dim = (-2,-1))**2
         loss = (nom).mean()
         if loss_in_dB:
             loss_dB = 10*torch.log10(loss).unsqueeze(0)
             return loss_dB
         else:
-            return loss
+            return loss.unsqueeze(0)
 
     def l12_loss(self):
-        return 10 * torch.log10(
-            torch.mean(torch.sum(torch.sqrt(torch.sum(self.s_t * torch.conj(self.s_t), dim=-1)),dim=-1)) + 1e-10
-        )
+        return torch.mean(torch.sum(torch.sqrt(torch.sum(self.s_t * torch.conj(self.s_t), dim=-1)),dim=-1)) + 1e-10
+        
 
     def forward(self,iter_num : int, log_losses_per_iter : bool = True):
 
         if self.opt_method == "GD_lagrange_multi":
-            recon_residue,complex_input_order_est = self.reconstruction_residue() #this is the grad for the lagrange multipliers relative to lambda
+            recon_residue = self.reconstruction_residue() #this is the grad for the lagrange multipliers relative to lambda
             grad_s = self.grad_dict()
             mu,ro = self.HP_model(iter_num) 
-            # v = 0.9 * v + grad_s
+            # self.v = 0.1 * self.v + grad_s
             self.s_t = self.s_t -  mu.exp() * grad_s
             self.lagrange_multi_t = self.lagrange_multi_t + ro.exp() * recon_residue
 
         if self.opt_method == "GD_AUG_lagrange_multi":
-            recon_residue,complex_input_order_est = self.reconstruction_residue(s_t) #this is the grad for the lagrange multipliers relative to lambda
+            recon_residue = self.reconstruction_residue(s_t) #this is the grad for the lagrange multipliers relative to lambda
             grad_s = self.grad_dict(recon_residue)
             self.s_t -= mu * grad_s
             self.lagrange_multi_t += ro * recon_residue
 
         if self.opt_method == "GD_regularization":
-            recon_residue,complex_input_order_est = self.reconstruction_residue() #this is real/imag stacked in last dimension
+            recon_residue = self.reconstruction_residue() #this is real/imag stacked in last dimension
             tmp_grad = torch.matmul(self.reduced_Yp,torch.complex(recon_residue[...,:self.T],recon_residue[...,self.T:]))
             grad_s = 2*torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1) + ro*self.l12_grad()
             self.s_t -= mu * grad_s
 
-        if log_losses_per_iter: #currently, dont keep track if we are not about to plot - and we only plot when we have batch = 1 (code doesnt handle multiple batches)
-            self.L12_loss = torch.cat(
-                (self.L12_loss, self.l12_loss().unsqueeze(0)/self.N),
-                dim=0,
-            )
-            self.reconstruction_loss = torch.cat(
-                (self.reconstruction_loss,self.input_order_loss(complex_input_order_est)),
-            )
+        # if log_losses_per_iter: #currently, dont keep track if we are not about to plot - and we only plot when we have batch = 1 (code doesnt handle multiple batches)
+        self.L12_loss = torch.cat(
+            (self.L12_loss, self.l12_loss().unsqueeze(0)),
+            dim=0,
+        )
+        self.reconstruction_loss = torch.cat(
+            (self.reconstruction_loss,self.input_order_loss(loss_in_dB=False)),
+        )
 
-            if self.gt_stft_anmt is not None:
-                self.gt_upscale_loss = torch.cat(
-                (self.gt_upscale_loss,self.upscaled_loss(loss_in_dB=True))
-            )
+        if self.gt_stft_anmt is not None:
+            self.gt_upscale_loss = torch.cat(
+            (self.gt_upscale_loss,self.upscaled_loss(loss_in_dB=False))
+        )
+            # print(f"Iter : {iter_num} | grad_s : {grad_s.norm(p=2, dim = (-2,-1)).mean().item()} | recond_residue : {recon_residue.norm(p=2, dim = (-2,-1)).mean().item()} | Upscale Loss {self.gt_upscale_loss[-1].item()} | Input Order Loss {self.reconstruction_loss[-1].item()}")
+            # try:
+            #     print(f"mu : {mu.exp().item()} | ro : {ro.exp().item()} ")
+            # except:
+            #     pass
+
 
     def get_current_state(self,return_device : Optional[str] = None):
         if return_device is None:
@@ -231,6 +248,7 @@ class optimizer(nn.Module):
         if self.num_grid_points == len(self.mask):
             return self.s_t.to(return_device),self.lagrange_multi_t.to(return_device)
         else:
+            assert False, "Not Implemented"
             # We were using a mask, so expand the dictionary back
             expanded_st = torch.zeros(self.num_windows,
                 self.num_grid_points,
@@ -247,20 +265,20 @@ class optimizer(nn.Module):
             tit = f'mu = {mu:.1e} ro = {ro:.1e}'
         parameters_title = f"{self.hyper_parameters} {tit} T = {self.T}"
         plt.figure()
-        plt.plot(self.L12_loss[from_iter:].cpu().detach())
+        plt.plot(10*torch.log10(self.L12_loss[from_iter:].cpu().detach()))
         plt.xlabel("Iterations")
         plt.ylabel("Loss [dB]")
         plt.title(f"L12 Loss {parameters_title}")
 
         plt.figure()
-        plt.plot(self.reconstruction_loss[from_iter:].cpu().detach())
+        plt.plot(10*torch.log10(self.reconstruction_loss[from_iter:].cpu().detach()))
         plt.xlabel("Iterations")
         plt.ylabel("Loss [dB]")
         plt.title(f"Input Reconstruction Loss {parameters_title}")
 
         if self.gt_stft_anmt is not None:
             plt.figure()
-            plt.plot(self.gt_upscale_loss[from_iter:].cpu().detach())
+            plt.plot(10*torch.log10(self.gt_upscale_loss[from_iter:].cpu().detach()))
             plt.xlabel("Iterations")
             plt.ylabel("Loss [dB]")
             plt.title(f"Upscale L2 Loss {parameters_title}")

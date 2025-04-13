@@ -13,13 +13,15 @@ import copy
 
 
 class HPNet_Pipeline:
-    def __init__(self,dataset_path : str, grid_type : str):
-        self.dataset_path = dataset_path
+    def __init__(self,grid_type : str):
         self.grid_type = grid_type
+        self.P_th, self.P_ph, self.num_grid_points = create_grid(self.grid_type)
+
+    def set_dataset(self,dataset_path : str):
+        self.dataset_path = dataset_path
         self.train_set = SoundFieldDataset(folder_path=dataset_path,dataset_type='train')
         self.val_set = SoundFieldDataset(folder_path=dataset_path,dataset_type='validation')
         self.test_set = SoundFieldDataset(folder_path=dataset_path,dataset_type='test')
-        self.P_th, self.P_ph, self.num_grid_points = create_grid(self.grid_type)
         self.input_order = self.train_set.input_order
         self.output_order = self.train_set.output_order
 
@@ -42,6 +44,7 @@ class HPNet_Pipeline:
         self.init_ro = init_ro
         self.num_iters = num_iters
         self.device = device
+        self.adam_lr = adam_lr
 
         first_order_encoder_mat = utils.create_sh_matrix(
             self.input_order, zen=self.P_th, azi=self.P_ph, type="complex"
@@ -62,9 +65,22 @@ class HPNet_Pipeline:
                    hyper_parameters= net_mode
                     )
 
-        self.classic_opt = copy.deepcopy(self.du_opt)
+        self.classic_opt = optimizer(first_order_encoder_mat, #version 0
+                   alpha=0.1,
+                   device=device,
+                   save_loss=False,
+                   P_th=self.P_th,
+                   P_ph=self.P_ph,
+                   num_iters=num_iters,
+                   num_freq_bins= n_fft//2 + 1,
+                   T = T,
+                   mu = self.init_mu,
+                   ro = self.init_ro,
+                   version = 0,
+                   hyper_parameters= net_mode
+                    )
 
-        self.training_opt = torch.optim.Adam(self.du_opt.parameters(), lr=adam_lr)
+        self.training_opt = torch.optim.Adam(self.du_opt.parameters(), lr=self.adam_lr)
         # self.du_opt = copy.deepcopy(self.base_optimizer)
 
     def run_optimizer(
@@ -84,13 +100,14 @@ class HPNet_Pipeline:
             optimizer_model = self.classic_opt
         else:
             optimizer_model = self.du_opt
-    
+
         optimizer_model.batch_preprocess(
             stft_anmt=low_order_stft,
             gt_stft_anmt=high_order_stft,
             init_s_t=init_st,
             init_lagrange_multi=init_lagrange,
         )
+        print(f"Init Upscaled Loss : {optimizer_model.upscaled_loss(loss_in_dB=True,s_t=init_st)}")
         with tqdm(total=(to_iter - from_iter), desc="DU_Optimizer", position=1, leave=False,dynamic_ncols=True,disable=disable_tqdm) as pbar:
             for iter in torch.arange(from_iter,to_iter):
                 optimizer_model(iter_num = iter, log_losses_per_iter = progress_per_iter)
@@ -99,7 +116,6 @@ class HPNet_Pipeline:
         if progress_per_iter:
             optimizer_model.plot_losses_per_iter()
             plt.show()
-
 
     def train_iter_group(self,star_iter : int,num_iters_in_group : int, num_epochs : int , train_loader : DataLoader,val_loader : DataLoader):
 
@@ -182,3 +198,15 @@ class HPNet_Pipeline:
             self.test_iter_group(start_iter,iters_per_train,test_loader)
             # TODO Save s_t and Lagrange multipliers into cpu dict
             # TODO Save model
+
+    def plot_dict(self,source_dict : torch.tensor,index = 50):
+        if source_dict.dtype == torch.complex64:
+            complex_sparse_stft_dict = source_dict
+        else:
+            complex_sparse_stft_dict = torch.complex(source_dict[...,:source_dict.shape[-1]//2],source_dict[...,source_dict.shape[-1]//2:])
+    
+        complex_sparse_stft_dict = (complex_sparse_stft_dict.permute(2,1,0,3).reshape(self.num_grid_points,self.n_fft//2 +1,-1).abs()**2).sum(dim=1).sqrt()
+        utils.plot_on_2D(azi=self.P_ph,
+                        zen=self.P_th,
+                        values=complex_sparse_stft_dict[:,index],
+                        title="")
