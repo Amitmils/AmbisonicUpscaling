@@ -169,7 +169,7 @@ class SoundField:
                     order, zen=self.P_th, azi=self.P_ph, type=SH_type
                 )
                 projected_values = (torch.abs((Y_p @ anm_f[:,:,t] ))**2).sum(dim=1)
-                utils.plot_on_2D(
+                utils.plot_on_2D_Mollweide(
                     azi=self.P_ph,
                     zen=self.P_th,
                     values=projected_values,
@@ -206,7 +206,7 @@ class SoundField:
                 order, zen=self.P_th, azi=self.P_ph, type='real'
             )
             projected_values = (Y_p @ anm_t[t])
-            utils.plot_on_2D(
+            utils.plot_on_2D_Mollweide(
                 azi=self.P_ph,
                 zen=self.P_th,
                 values=projected_values,
@@ -236,7 +236,7 @@ class SoundField:
                     order, zen=self.P_th, azi=self.P_ph, type=SH_type
                 )
                 projected_values = (torch.abs((Y_p @ anm_f[:,:,t] ))**2).sum(dim=1)
-                utils.plot_on_2D(
+                utils.plot_on_2D_Mollweide(
                     azi=self.P_ph,
                     zen=self.P_th,
                     values=projected_values,
@@ -277,7 +277,7 @@ class SoundField:
                 t = 0
                 projected_values = (torch.abs((Y_p @ anm_f[:,:,t] ))**2).sum(dim=1)
                 # plot_on_sphere([P_th,P_ph],projected_values,title=f"Encoded Signal N={sh_order_input}\n$\\theta$ = {math.degrees(th)} $\\phi$ = {math.degrees(ph)}")
-                utils.plot_on_2D(
+                utils.plot_on_2D_Mollweide(
                     azi=self.P_ph,
                     zen=self.P_th,
                     values=projected_values,
@@ -365,7 +365,7 @@ class SoundField:
             s_dict = s_dict.permute(1, 0, 2).reshape(
                 self.num_grid_points, self.window_length * self.num_windows
             )
-        utils.plot_on_2D(
+        utils.plot_on_2D_Mollweide(
             azi=self.P_ph,
             zen=self.P_th,
             values=s_dict[:, sample_idx].cpu(),

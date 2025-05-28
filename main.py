@@ -95,7 +95,7 @@ if __name__ == "__main__":
     # project on 192 points
     projected_values = anm_t[0, :] @ np.conj(Y_p)
     # plot_on_sphere([P_th,P_ph],projected_values,title=f"Encoded Signal N={sh_order_input}\n$\\theta$ = {math.degrees(th)} $\\phi$ = {math.degrees(ph)}")
-    plot_on_2D(
+    plot_on_2D_Mollweide(
         azi=P_ph,
         zen=P_th,
         values=projected_values,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     if mask is not None:
         dummy = np.zeros_like(mask)
         dummy[mask] = 1
-        plot_on_2D(
+        plot_on_2D_Mollweide(
             azi=P_ph,
             zen=P_th,
             values=dummy,
@@ -210,7 +210,7 @@ if __name__ == "__main__":
         test = list()
         for i in range(min(0, 1) * tau, min(num_windows, 1) * tau, tau):
             s_dict = s_windowed.transpose(1, 0, 2).reshape(P, tau * num_windows)
-            plot_on_2D(
+            plot_on_2D_Mollweide(
                 azi=P_ph,
                 zen=P_th,
                 values=s_dict[:, i] / np.sign(s[i]),
@@ -235,7 +235,7 @@ if __name__ == "__main__":
             # print(f"Ideal Constraint {Y_p[:,P_index] * s[i].reshape(-1,1)- anm_t[i,:]}")
             anm_upscaled = Y_p_tag @ s_dict[:, i]
             s_upscaled = anm_upscaled @ np.conj(Y_p_tag) / np.sign(s[i])
-            # plot_on_2D(azi=P_ph,zen=P_th,values=s_upscaled,title=f"Upscaled Signal N={upscale_order} Window Window {i//tau}\n$\\theta$ = {th_list[start_idx:end_idx+1]} \n$\\phi$ = {ph_list[start_idx:end_idx+1]}")
+            # plot_on_2D_Mollweide(azi=P_ph,zen=P_th,values=s_upscaled,title=f"Upscaled Signal N={upscale_order} Window Window {i//tau}\n$\\theta$ = {th_list[start_idx:end_idx+1]} \n$\\phi$ = {ph_list[start_idx:end_idx+1]}")
         # plt.figure()
         # plt.plot(ideal_constraint_loss,label='Ideal',marker='o')
         # plt.plot(algo_constraint_loss,label='Algorithm',marker='o')

@@ -36,6 +36,7 @@ class HPNet_Pipeline:
         adam_lr : float = 1e-1,
         net_mode : str = 'DU_simple',
         device : str = 'cpu',
+        sh_type = 'complex',
     ):
         self.batch_size = batch_size
         self.n_fft = n_fft
@@ -47,7 +48,7 @@ class HPNet_Pipeline:
         self.adam_lr = adam_lr
 
         first_order_encoder_mat = utils.create_sh_matrix(
-            self.input_order, zen=self.P_th, azi=self.P_ph, type="complex"
+            self.input_order, zen=self.P_th, azi=self.P_ph, type=sh_type
         )
 
         self.du_opt = optimizer(first_order_encoder_mat,
@@ -62,7 +63,9 @@ class HPNet_Pipeline:
                    mu = self.init_mu,
                    ro = self.init_ro,
                    version = version,
-                   hyper_parameters= net_mode
+                   hyper_parameters= net_mode,
+                   sh_type = sh_type,
+
                     )
 
         self.classic_opt = optimizer(first_order_encoder_mat, #version 0
@@ -77,7 +80,8 @@ class HPNet_Pipeline:
                    mu = self.init_mu,
                    ro = self.init_ro,
                    version = 0,
-                   hyper_parameters= net_mode
+                   hyper_parameters= net_mode,
+                   sh_type = sh_type,
                     )
 
         self.training_opt = torch.optim.Adam(self.du_opt.parameters(), lr=self.adam_lr)
@@ -107,7 +111,6 @@ class HPNet_Pipeline:
             init_s_t=init_st,
             init_lagrange_multi=init_lagrange,
         )
-        print(f"Init Upscaled Loss : {optimizer_model.upscaled_loss(loss_in_dB=True,s_t=init_st)}")
         with tqdm(total=(to_iter - from_iter), desc="DU_Optimizer", position=1, leave=False,dynamic_ncols=True,disable=disable_tqdm) as pbar:
             for iter in torch.arange(from_iter,to_iter):
                 optimizer_model(iter_num = iter, log_losses_per_iter = progress_per_iter)
@@ -206,7 +209,7 @@ class HPNet_Pipeline:
             complex_sparse_stft_dict = torch.complex(source_dict[...,:source_dict.shape[-1]//2],source_dict[...,source_dict.shape[-1]//2:])
     
         complex_sparse_stft_dict = (complex_sparse_stft_dict.permute(2,1,0,3).reshape(self.num_grid_points,self.n_fft//2 +1,-1).abs()**2).sum(dim=1).sqrt()
-        utils.plot_on_2D(azi=self.P_ph,
+        utils.plot_on_2D_Mollweide(azi=self.P_ph,
                         zen=self.P_th,
                         values=complex_sparse_stft_dict[:,index],
                         title="")

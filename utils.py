@@ -9,6 +9,7 @@ from scipy.spatial import ConvexHull
 import torchaudio
 import torch
 from signal_info import signal_info
+from scipy import special as scyspecial
 
 
 def plot_loss_tensor(loss_tensor):
@@ -106,6 +107,49 @@ def sph2cart(sph_coords):
 
 
 def create_sh_matrix(N, azi, zen, type="real"):
+    """
+    Create a spherical harmonics matrix.
+
+    Parameters:
+    N (int): The order of the spherical harmonics.
+    azi (torch.tensor): Array of azimuthal angles in radians.
+    zen (torch.tensor): Array of zenith angles in radians.
+    type (str, optional): Type of spherical harmonics ('complex' or 'real'). Default is 'complex'.
+
+    Returns:
+    torch.tensor: The spherical harmonics matrix.
+    """
+    azi = azi.reshape(-1)
+    zen =zen.reshape(-1)
+
+    if azi.ndim == 0:
+        Q = 1
+    else:
+        Q = len(azi)
+    if type == 'complex':
+        Ymn = torch.zeros([Q, (N+1)**2], dtype=torch.complex64)
+    elif type == 'real':
+        Ymn = torch.zeros([Q, (N+1)**2], dtype=torch.float32)
+    else:
+        raise ValueError('sh_type unknown.')
+
+    idx = 0
+    for n in range(N+1):
+        for m in range(-n, n+1):
+            Ymn_complex = scyspecial.sph_harm(m, n, azi, zen)
+            if type == 'complex':
+                Ymn[:, idx] = Ymn_complex
+            elif type == 'real':
+                if m == 0:
+                    Ymn[:, idx] = Ymn_complex.real
+                if m < 0:
+                    Ymn[:, idx] = np.sqrt(2) * (-1) ** abs(m) * Ymn_complex.imag
+                if m > 0:
+                    Ymn[:, idx] = np.sqrt(2) * (-1) ** m * Ymn_complex.real
+            idx += 1
+    return Ymn
+
+def create_sh_matrix_old(N, azi, zen, type="real"):
     """
     Create a spherical harmonics matrix.
 
@@ -417,7 +461,7 @@ def create_sin_wave(freq, duration=10.0, fs=48000, output_dir="data/sound_files"
     sf.write(os.path.join(output_dir, f"{freq}Hz_sine_wave.wav"), sine_wave, fs)
 
 
-def plot_on_2D(azi, zen, values, title="", normalize=True):
+def plot_on_2D_Mollweide(azi, zen, values, title="", normalize=True):
     """
     Plot values on a 2D Mollweide projection.
 
@@ -454,3 +498,94 @@ def plot_on_2D(azi, zen, values, title="", normalize=True):
     # Apply ticks and labels
     ax.set_yticks(yticks_radians.cpu().numpy())
     ax.set_yticklabels(yticks_degrees.cpu().numpy())
+
+def _stft(
+time_signal: torch.tensor,
+num_bins : int = 129,
+):
+
+    n_fft = int(2*(num_bins - 1))      # Extract # FFT points from size of anm_f
+    hop_length = n_fft//2   # Hop length (stride)
+    win_length = n_fft   # Window length
+    stft_signal = torch.stft(time_signal,
+        n_fft=n_fft,
+        hop_length= hop_length,
+        win_length=win_length,
+        window = torch.hann_window(win_length),
+        return_complex=True
+        )
+
+    return stft_signal
+
+def _istft(
+    dict_stft: torch.tensor,
+):
+    if dict_stft.dtype == torch.complex64:
+        complex_sparse_stft_dict = dict_stft
+    else:
+        complex_sparse_stft_dict = torch.complex(dict_stft[...,:dict_stft.shape[-1]//2],dict_stft[...,dict_stft.shape[-1]//2:])
+    
+    if complex_sparse_stft_dict.dim() == 4:
+        complex_sparse_stft_dict = s_dict_to_stft(complex_sparse_stft_dict)
+
+    num_bins = complex_sparse_stft_dict.shape[2]  # (# F Bins)
+    n_fft = int(2*(num_bins - 1))      # Extract # FFT points from size of anm_f
+    hop_length = n_fft//2   # Hop length (stride)
+    win_length = n_fft   # Window length
+    time_signal = torch.istft(complex_sparse_stft_dict.permute(1, 2, 0).cpu(),#torch.sum(anm_f, dim=1).t(),
+        n_fft=n_fft,
+        hop_length= hop_length,
+        win_length=win_length,
+        window = torch.hann_window(win_length)
+        )
+    
+    return time_signal
+
+def s_dict_to_stft(dict_stft: torch.tensor,):
+        if dict_stft.dtype == torch.complex64:
+            complex_sparse_stft_dict = dict_stft
+        else:
+            complex_sparse_stft_dict = torch.complex(dict_stft[...,:dict_stft.shape[-1]//2],dict_stft[...,dict_stft.shape[-1]//2:])
+        num_window_groups,num_bins,num_grid_points,T = complex_sparse_stft_dict.shape  #(# Frames, # F Bins, # Grid Points, # T Bins)
+        complex_sparse_stft = complex_sparse_stft_dict.permute(2,1,0,3).reshape(num_grid_points,num_bins,num_window_groups*T).permute(2,0,1)
+        return complex_sparse_stft
+
+
+def plot_ambi_energy_2d(ambi_signal, step_size=10):
+    """Visualizes RIR energy distribution over a 3D sphere and 2D map."""
+
+    order = int(np.sqrt(ambi_signal.shape[0]) - 1)  # Assuming rir is in ACN format
+
+    # Prepare spherical grid
+    azi = torch.linspace(-np.pi, np.pi, step_size)  # Azimuth in radians
+    colat = torch.linspace(0, np.pi, step_size)   # Colatitude in radians
+    energy_map = torch.zeros((step_size, step_size))
+
+
+    # Loop through all directions to calculate the energy
+    for i, az in enumerate(azi):
+        for j, co in enumerate(colat):
+            # Decode the RIR at each direction (azimuth, colatitude)
+            Y_dir = create_sh_matrix(N = order, azi = az, zen = co).reshape(1,-1)
+            ambi_signal_time_decoded = Y_dir @ ambi_signal  # [n_samples,] decoded RIR
+            energy_map[j, i] = torch.sum(ambi_signal_time_decoded**2)  # energy = sum of squared amplitudes
+    # Normalize energy for better visualization
+    energy_map = energy_map / torch.max(energy_map)
+
+    # Set up the 3D plot
+    fig = plt.figure(figsize=(12, 8))
+    # Convert radians to degrees for 2D plot
+    azi_deg = np.degrees(azi)
+    colat_deg = np.degrees(colat)
+    
+    # 2D Plot with degrees
+    ax2 = fig.add_subplot(122)
+    c = ax2.pcolormesh(azi_deg, colat_deg, energy_map, shading='auto', cmap='viridis')
+    ax2.set_title("Energy Distribution (2D Map)")
+    ax2.set_xlabel("Azimuth (degrees)")
+    ax2.set_ylabel("Colatitude (degrees)")
+    fig.colorbar(c, ax=ax2)
+
+    plt.show()
+    return energy_map
+

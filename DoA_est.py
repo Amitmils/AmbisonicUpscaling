@@ -124,7 +124,7 @@ class DoA_via_bands:
                 x.append(candidate.zen * torch.pi/180)
                 y.append(candidate.azi * torch.pi/180)
                 c.append(1)
-            utils.plot_on_2D(azi=torch.tensor(y),zen=torch.tensor(x),values=torch.tensor(c),title=f"DoA candidates for window {window}")
+            utils.plot_on_2D_Mollweide(azi=torch.tensor(y),zen=torch.tensor(x),values=torch.tensor(c),title=f"DoA candidates for window {window}")
 
         if window is not None:
             plot_v2()

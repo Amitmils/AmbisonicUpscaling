@@ -27,7 +27,8 @@ class optimizer(nn.Module):
         save_loss=False,
         opt_method="GD_lagrange_multi",
         device="cpu",
-        hyper_parameters = 'classic'
+        hyper_parameters = 'classic',
+        sh_type = 'complex',
     ):
         super().__init__()
         self.device = device
@@ -49,6 +50,7 @@ class optimizer(nn.Module):
         self.num_iters = num_iters
         self.init_mu = mu
         self.init_ro = ro
+        self.sh_type = sh_type
         self.init_model()
 
     
@@ -87,8 +89,7 @@ class optimizer(nn.Module):
         self.reconstruction_loss = torch.tensor([]).to(self.device)
         self.gt_upscale_loss = torch.tensor([]).to(self.device)
         self.sparse_dict_loss = torch.tensor([]).to(self.device)
-        self.reduced_Yp = self.Y_p.to(self.device)[self.mask,:]
-
+        self.reduced_Yp = self.Y_p.to(self.device)[self.mask,:].to(torch.complex64)
         _, self.num_channels, self.num_bins = stft_anmt.shape[-3:] #update num windows after mod(self.T)
         self.stft_anmt = self.reshape_stft(stft_anmt).to(self.device)
         self.complex_input_order =  torch.complex(self.stft_anmt[...,:self.T],self.stft_anmt[...,self.T:])
@@ -98,7 +99,7 @@ class optimizer(nn.Module):
         self.N = self.stft_anmt.shape[-4]
         if gt_stft_anmt is not None:
             self.gt_stft_anmt = self.reshape_stft(gt_stft_anmt).to(self.device)
-            self.reduced_upscaled_Yp = utils.create_sh_matrix(int(torch.sqrt(torch.tensor(self.gt_stft_anmt.shape[3])) - 1) , zen=self.P_th, azi=self.P_ph,type='complex').to(self.device)[self.mask,:]
+            self.reduced_upscaled_Yp = utils.create_sh_matrix(int(torch.sqrt(torch.tensor(self.gt_stft_anmt.shape[3])) - 1) , zen=self.P_th, azi=self.P_ph,type=self.sh_type).to(self.device)[self.mask,:].to(self.gt_stft_anmt.dtype)
             self.complex_gt_stft_anmt = torch.complex(self.gt_stft_anmt[...,:self.T],self.gt_stft_anmt[...,self.T:])
             # energy= (torch.abs(complex_gt_stft_anmt)**2).sum().sqrt() + 1e-8# torch.norm(complex_gt_stft_anmt,p=2,dim=-1,keepdim=True).sum(1,keepdim=True) + 1e-8
             # complex_gt_stft_anmt /= energy
@@ -185,7 +186,7 @@ class optimizer(nn.Module):
             return None
         if s_t is None:
             s_t = self.s_t
-        self.upscaled_est = torch.matmul(self.reduced_upscaled_Yp.t().conj(),torch.complex(s_t[...,:self.T],s_t[...,self.T:]))
+        self.upscaled_est = torch.matmul(self.reduced_upscaled_Yp.t().conj().to(torch.complex64),torch.complex(s_t[...,:self.T],s_t[...,self.T:]))
         constraint_res = self.upscaled_est - self.complex_gt_stft_anmt
         denom = torch.norm(self.complex_gt_stft_anmt, p=2, dim = (-2,-1))**2
         nom = torch.norm(constraint_res, p=p, dim = (-2,-1))**2
