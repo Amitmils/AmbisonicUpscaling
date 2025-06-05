@@ -130,13 +130,17 @@ class optimizer(nn.Module):
         self.v = 0 #momentum
 
     def reshape_stft(self,stft_anmt):
+        # TODO Always add batch dimension?
         if stft_anmt.dim() == 4:
             batches = stft_anmt.shape[0]
         else:
             batches = None
         curr_num_windows = stft_anmt.shape[-3] # 
         if (curr_num_windows % self.T) > 0:
-            stft_anmt = stft_anmt[:,:-(curr_num_windows%self.T)]
+            if batches is not None:
+                stft_anmt = stft_anmt[:,:-(curr_num_windows%self.T)]
+            else:
+                stft_anmt = stft_anmt[:-(curr_num_windows%self.T)]
         self.num_windows = stft_anmt.shape[-3]
         if batches is not None:
             stft_anmt_2 = stft_anmt.permute(-4,-1,-2,-3).reshape(batches,self.num_bins,stft_anmt.shape[-2],-1,self.T).permute(-5,-2,-4,-3,-1)
