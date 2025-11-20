@@ -85,10 +85,14 @@ class optimizer(nn.Module):
         else:
             self.mask = mask
 
-        self.L12_loss = torch.tensor([]).to(self.device)
-        self.reconstruction_loss = torch.tensor([]).to(self.device)
-        self.gt_upscale_loss = torch.tensor([]).to(self.device)
-        self.sparse_dict_loss = torch.tensor([]).to(self.device)
+
+        loss_attributes = [
+        "L12_loss", "sdr_constraint", "sdr_objective",
+        "reconstruction_loss", "gt_upscale_loss", "sparse_dict_loss"
+        ]
+        for attr_name in loss_attributes:
+            setattr(self, attr_name, torch.tensor([]).to(self.device))
+
         self.reduced_Yp = self.Y_p.to(self.device)[self.mask,:].to(torch.complex64)
         _, self.num_channels, self.num_bins = stft_anmt.shape[-3:] #update num windows after mod(self.T)
         self.stft_anmt = self.reshape_stft(stft_anmt).to(self.device)
@@ -161,7 +165,6 @@ class optimizer(nn.Module):
             assert False, 'ALM not in use'
             penalty_term = torch.matmul(self.reduced_Yp, torch.complex(recon_residue[...,:self.T], recon_residue[...,self.T:]))
             grad += ro * 2 * torch.cat((penalty_term.real,penalty_term.imag),dim=-1) 
-
         return grad
 
     def l12_grad(self):
@@ -203,7 +206,12 @@ class optimizer(nn.Module):
 
     def l12_loss(self):
         return torch.mean(torch.sum(torch.sqrt(torch.sum(self.s_t * torch.conj(self.s_t), dim=-1)),dim=-1)) + 1e-10
-        
+    
+    def stft_sdr(self,s,s_hat):
+        error = (s_hat-s).abs().square().sum()
+        signal = s.abs().square().sum()
+        sdr = 10 * torch.log10(signal / error)
+        return sdr
 
     def forward(self,iter_num : int, log_losses_per_iter : bool = True):
 
@@ -232,13 +240,21 @@ class optimizer(nn.Module):
             (self.L12_loss, self.l12_loss().unsqueeze(0)),
             dim=0,
         )
+
         self.reconstruction_loss = torch.cat(
             (self.reconstruction_loss,self.input_order_loss(loss_in_dB=False)),
+        )
+
+        self.sdr_constraint = torch.cat(
+            (self.sdr_constraint,self.stft_sdr(self.complex_input_order,self.complex_input_order_est).unsqueeze(0)),
         )
 
         if self.gt_stft_anmt is not None:
             self.gt_upscale_loss = torch.cat(
             (self.gt_upscale_loss,self.upscaled_loss(loss_in_dB=False))
+        )
+            self.sdr_objective = torch.cat(
+            (self.sdr_objective,self.stft_sdr(self.complex_gt_stft_anmt,self.upscaled_est).unsqueeze(0)),
         )
             # print(f"Iter : {iter_num} | grad_s : {grad_s.norm(p=2, dim = (-2,-1)).mean().item()} | recond_residue : {recon_residue.norm(p=2, dim = (-2,-1)).mean().item()} | Upscale Loss {self.gt_upscale_loss[-1].item()} | Input Order Loss {self.reconstruction_loss[-1].item()}")
             # try:
@@ -281,12 +297,24 @@ class optimizer(nn.Module):
         plt.ylabel("Loss [dB]")
         plt.title(f"Input Reconstruction Loss {parameters_title}")
 
+        plt.figure()
+        plt.plot(10*torch.log10(self.sdr_constraint[from_iter:].cpu().detach()))
+        plt.xlabel("Iterations")
+        plt.ylabel("SDR [dB]")
+        plt.title(f"Input Reconstruction SDR {parameters_title}")
+
         if self.gt_stft_anmt is not None:
             plt.figure()
-            plt.plot(10*torch.log10(self.gt_upscale_loss[from_iter:].cpu().detach()))
+            plt.plot(self.gt_upscale_loss[from_iter:].cpu().detach())
             plt.xlabel("Iterations")
             plt.ylabel("Loss [dB]")
             plt.title(f"Upscale L2 Loss {parameters_title}")
+
+            plt.figure()
+            plt.plot(self.sdr_objective[from_iter:].cpu().detach())
+            plt.xlabel("Iterations")
+            plt.ylabel("SDR [dB]")
+            plt.title(f"Upscaled SDR {parameters_title}")
 
 class EncoderBlock(nn.Module):
     def __init__(self, *args, **kwargs):
