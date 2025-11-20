@@ -94,9 +94,11 @@ class optimizer(nn.Module):
             setattr(self, attr_name, torch.tensor([]).to(self.device))
 
         self.reduced_Yp = self.Y_p.to(self.device)[self.mask,:].to(torch.complex64)
+        self.reduced_Yp_t_conj = self.reduced_Yp.t().conj().contiguous()
+
         _, self.num_channels, self.num_bins = stft_anmt.shape[-3:] #update num windows after mod(self.T)
         self.stft_anmt = self.reshape_stft(stft_anmt).to(self.device)
-        self.complex_input_order =  torch.complex(self.stft_anmt[...,:self.T],self.stft_anmt[...,self.T:])
+        self.complex_input_order =  torch.complex(self.stft_anmt[...,:self.T],self.stft_anmt[...,self.T:]).contiguous()
         # energy= (torch.abs(complex_input_order)**2).sum().sqrt() + 1e-8# torch.norm(complex_gt_stft_anmt,p=2,dim=-1,keepdim=True).sum(1,keepdim=True) + 1e-8
         # complex_input_order /= energy
 
@@ -104,7 +106,7 @@ class optimizer(nn.Module):
         if gt_stft_anmt is not None:
             self.gt_stft_anmt = self.reshape_stft(gt_stft_anmt).to(self.device)
             self.reduced_upscaled_Yp = utils.create_sh_matrix(int(torch.sqrt(torch.tensor(self.gt_stft_anmt.shape[3])) - 1) , zen=self.P_th, azi=self.P_ph,type=self.sh_type).to(self.device)[self.mask,:].to(self.gt_stft_anmt.dtype)
-            self.complex_gt_stft_anmt = torch.complex(self.gt_stft_anmt[...,:self.T],self.gt_stft_anmt[...,self.T:])
+            self.complex_gt_stft_anmt = torch.complex(self.gt_stft_anmt[...,:self.T],self.gt_stft_anmt[...,self.T:]).contiguous()
             # energy= (torch.abs(complex_gt_stft_anmt)**2).sum().sqrt() + 1e-8# torch.norm(complex_gt_stft_anmt,p=2,dim=-1,keepdim=True).sum(1,keepdim=True) + 1e-8
             # complex_gt_stft_anmt /= energy
         else:
@@ -174,7 +176,7 @@ class optimizer(nn.Module):
         return grad
 
     def reconstruction_residue(self):
-        self.complex_input_order_est = torch.matmul(self.reduced_Yp.t().conj(),torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
+        self.complex_input_order_est = torch.matmul(self.reduced_Yp_t_conj,torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
         constraint_res = self.complex_input_order_est - self.complex_input_order
         constraint_res = torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
         return constraint_res
@@ -235,27 +237,27 @@ class optimizer(nn.Module):
             grad_s = 2*torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1) + ro*self.l12_grad()
             self.s_t -= mu * grad_s
 
-        # if log_losses_per_iter: #currently, dont keep track if we are not about to plot - and we only plot when we have batch = 1 (code doesnt handle multiple batches)
-        self.L12_loss = torch.cat(
-            (self.L12_loss, self.l12_loss().unsqueeze(0)),
-            dim=0,
-        )
+        if log_losses_per_iter: #currently, dont keep track if we are not about to plot - and we only plot when we have batch = 1 (code doesnt handle multiple batches)
+            self.L12_loss = torch.cat(
+                (self.L12_loss, self.l12_loss().unsqueeze(0)),
+                dim=0,
+            )
 
-        self.reconstruction_loss = torch.cat(
-            (self.reconstruction_loss,self.input_order_loss(loss_in_dB=False)),
-        )
+            self.reconstruction_loss = torch.cat(
+                (self.reconstruction_loss,self.input_order_loss(loss_in_dB=False)),
+            )
 
-        self.sdr_constraint = torch.cat(
-            (self.sdr_constraint,self.stft_sdr(self.complex_input_order,self.complex_input_order_est).unsqueeze(0)),
-        )
+            self.sdr_constraint = torch.cat(
+                (self.sdr_constraint,self.stft_sdr(self.complex_input_order,self.complex_input_order_est).unsqueeze(0)),
+            )
 
-        if self.gt_stft_anmt is not None:
-            self.gt_upscale_loss = torch.cat(
-            (self.gt_upscale_loss,self.upscaled_loss(loss_in_dB=False))
-        )
-            self.sdr_objective = torch.cat(
-            (self.sdr_objective,self.stft_sdr(self.complex_gt_stft_anmt,self.upscaled_est).unsqueeze(0)),
-        )
+            if self.gt_stft_anmt is not None:
+                self.gt_upscale_loss = torch.cat(
+                (self.gt_upscale_loss,self.upscaled_loss(loss_in_dB=False))
+            )
+                self.sdr_objective = torch.cat(
+                (self.sdr_objective,self.stft_sdr(self.complex_gt_stft_anmt,self.upscaled_est).unsqueeze(0)),
+            )
             # print(f"Iter : {iter_num} | grad_s : {grad_s.norm(p=2, dim = (-2,-1)).mean().item()} | recond_residue : {recon_residue.norm(p=2, dim = (-2,-1)).mean().item()} | Upscale Loss {self.gt_upscale_loss[-1].item()} | Input Order Loss {self.reconstruction_loss[-1].item()}")
             # try:
             #     print(f"mu : {mu.exp().item()} | ro : {ro.exp().item()} ")
