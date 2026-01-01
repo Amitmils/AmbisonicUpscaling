@@ -7,6 +7,7 @@ import torch.nn as nn
 import utils
 from HyperParaNet import HPNet
 from typing import Optional,Union,List
+from time import time
 
 
 class optimizer(nn.Module):
@@ -176,6 +177,7 @@ class optimizer(nn.Module):
         return grad
 
     def reconstruction_residue(self):
+
         self.complex_input_order_est = torch.matmul(self.reduced_Yp_t_conj,torch.complex(self.s_t[...,:self.T],self.s_t[...,self.T:]))
         constraint_res = self.complex_input_order_est - self.complex_input_order
         constraint_res = torch.cat((constraint_res.real,constraint_res.imag),dim=-1)
@@ -216,9 +218,8 @@ class optimizer(nn.Module):
         return sdr
 
     def forward(self,iter_num : int, log_losses_per_iter : bool = True):
-
         if self.opt_method == "GD_lagrange_multi":
-            recon_residue = self.reconstruction_residue() #this is the grad for the lagrange multipliers relative to lambda
+            recon_residue = self.reconstruction_residue()
             grad_s = self.grad_dict()
             mu,ro = self.HP_model(iter_num) 
             # self.v = 0.1 * self.v + grad_s
@@ -236,6 +237,7 @@ class optimizer(nn.Module):
             tmp_grad = torch.matmul(self.reduced_Yp,torch.complex(recon_residue[...,:self.T],recon_residue[...,self.T:]))
             grad_s = 2*torch.cat((tmp_grad.real,tmp_grad.imag),dim=-1) + ro*self.l12_grad()
             self.s_t -= mu * grad_s
+        # print(f"inner inner loop {time()-start}")
 
         if log_losses_per_iter: #currently, dont keep track if we are not about to plot - and we only plot when we have batch = 1 (code doesnt handle multiple batches)
             self.L12_loss = torch.cat(

@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm.notebook import tqdm
 from typing import Union, Optional, List
 import utils
-import copy
+import time
 
 
 class HPNet_Pipeline:
@@ -111,10 +111,12 @@ class HPNet_Pipeline:
             init_s_t=init_st,
             init_lagrange_multi=init_lagrange,
         )
+
         with tqdm(total=(to_iter - from_iter), desc="DU_Optimizer", position=1, leave=False,dynamic_ncols=True,disable=disable_tqdm) as pbar:
             for iter in torch.arange(from_iter,to_iter):
                 optimizer_model(iter_num = iter, log_losses_per_iter = progress_per_iter)
                 pbar.update(1)
+
 
         if progress_per_iter:
             optimizer_model.plot_losses_per_iter()
